@@ -27,7 +27,7 @@ def csv_to_events(csv_path: str, limit=None):
         available_columns = df.columns.tolist()
         print(f"Available columns in CSV: {available_columns}")
         
-        # Create a mapping from expected column names to actual column names
+        # Create a mapping from expected column names to actual column names.
         column_mapping = {}
         for expected_col in expected_columns:
             # Try exact match first
