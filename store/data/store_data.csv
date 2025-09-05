@@ -1,0 +1,4 @@
+store_id,store_name,month,sales,visitors,notes
+1,Downtown Mart,2024-01,120000,15000,Strong January sales due to promotions
+2,Suburb Shop,2024-01,80000,9000,Steady growth; local event increased visitors
+3,Airport Kiosk,2024-01,45000,22000,High footfall but low conversion

@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+scikit-learn
+pandas
+python-multipart
+pyjwt
+cryptography
+spacy
+gensim
+transformers
+torch
+requests
+python-dotenv
