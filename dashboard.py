@@ -1,4 +1,3 @@
-# dashboard.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -431,98 +430,67 @@ def main():
         st.markdown('<div class="agent-section">', unsafe_allow_html=True)
         st.markdown('<h2 class="agent-header">🔄 Coordinator Agent <span class="port-label">:8110</span></h2>', unsafe_allow_html=True)
         
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            if st.button("Process Data", key="process_btn", use_container_width=True):
-                with st.spinner("Processing data through all agents..."):
-                    success, message = trigger_data_processing("full")
-                    if success:
-                        st.success("Data processed successfully!")
-                        with st.expander("View Processing Details"):
-                            st.json(message)
-                    else:
-                        st.error(f"Error: {message}")
-            
-            st.info("Click the button to process data through all agents and generate insights.")
-        
-        with col2:
-            # Quick stats
-            if 'amount' in df.columns:
-                total_sales = df[df['event_type'] == 'sale']['amount'].sum()
-                avg_sale = df[df['event_type'] == 'sale']['amount'].mean()
-                st.metric("Total Sales", f"${total_sales:,.2f}")
-                st.metric("Average Sale", f"${avg_sale:,.2f}")
-        
+        process_type = st.selectbox("Select Process Type", ["full_pipeline", "quick_scan"], key="process_select")
+
+        if st.button("Process Data", key="process_btn"):
+            with st.spinner("Processing data through coordinator..."):
+                success, result = trigger_data_processing(process_type)
+                if success:
+                    st.success(f"Processing complete! Batch ID: {result.get('batch_id')}, Status: {result.get('status')}")
+                    st.json(result)
+                else:
+                    st.error(f"Processing failed: {result}")
+
+        # Fetch and display audits
+        try:
+            response = requests.get(f"{AGENT_ENDPOINTS['coordinator']}/audits", timeout=5)
+            if response.status_code == 200:
+                audits = response.json()
+                if audits:
+                    st.subheader("Recent Batch Audits")
+                    # Display as table for overview
+                    audit_df = pd.DataFrame(audits)[['batch_id', 'ts', 'status', 'events_count']]
+                    st.dataframe(audit_df.sort_values('ts', ascending=False), use_container_width=True)
+                    
+                    # Expandable details for each batch
+                    for audit in audits:
+                        with st.expander(f"Details for Batch {audit['batch_id']} ({audit['status']})"):
+                            st.write(f"Timestamp: {audit['ts']}")
+                            st.write(f"Events Processed: {audit.get('events_count', 'N/A')}")
+                            if 'analyzer' in audit:
+                                st.write(f"Insights Generated: {audit['analyzer'].get('count', 'N/A')}")
+                                st.json(audit['analyzer'].get('insights_preview', []))
+                            if 'kpi_results' in audit:
+                                st.write("KPI Results:")
+                                st.json(audit['kpi_results'])
+                            if 'report' in audit:
+                                st.write("Report Note:")
+                                st.json(audit['report'])
+                            if 'error' in audit:
+                                st.error(f"Error: {audit['error']}")
+                else:
+                    st.info("No audit logs available yet. Process data to generate some.")
+            else:
+                st.warning("Could not fetch audits from coordinator.")
+        except Exception as e:
+            st.error(f"Error fetching audits: {str(e)}")
+
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Visualization Tab
     with tab3:
         st.markdown('<div class="agent-section">', unsafe_allow_html=True)
-        st.markdown('<h2 class="agent-header">📊 Data Visualization</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="agent-header">📊 Visualization <span class="port-label"></span></h2>', unsafe_allow_html=True)
         
-        # Create and display charts
         charts = create_visualization_charts(df)
         
         if charts:
-            # Sales Over Time
-            if 'sales_over_time' in charts:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                st.markdown('<h3 class="viz-header">Sales Over Time by Store</h3>', unsafe_allow_html=True)
-                st.plotly_chart(charts['sales_over_time'], use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Store Performance Comparison
-            if 'store_performance' in charts:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                st.markdown('<h3 class="viz-header">Store Performance Comparison</h3>', unsafe_allow_html=True)
-                st.plotly_chart(charts['store_performance'], use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Event Distribution
-                if 'event_distribution' in charts:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    st.markdown('<h3 class="viz-header">Event Type Distribution</h3>', unsafe_allow_html=True)
-                    st.plotly_chart(charts['event_distribution'], use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col2:
-                # Monthly Sales
-                if 'monthly_sales' in charts:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    st.markdown('<h3 class="viz-header">Monthly Sales Trend</h3>', unsafe_allow_html=True)
-                    st.plotly_chart(charts['monthly_sales'], use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-            
-            col3, col4 = st.columns(2)
-            
-            with col3:
-                # Sales by Weekday
-                if 'weekday_sales' in charts:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    st.markdown('<h3 class="viz-header">Sales by Day of Week</h3>', unsafe_allow_html=True)
-                    st.plotly_chart(charts['weekday_sales'], use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col4:
-                # Top Selling Stores
-                if 'store_sales' in charts:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    st.markdown('<h3 class="viz-header">Total Sales by Store</h3>', unsafe_allow_html=True)
-                    st.plotly_chart(charts['store_sales'], use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Sales Heatmap
-            if 'sales_heatmap' in charts:
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                st.markdown('<h3 class="viz-header">Sales Heatmap by Day and Hour</h3>', unsafe_allow_html=True)
-                st.plotly_chart(charts['sales_heatmap'], use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            cols = st.columns(2)
+            for i, (title, fig) in enumerate(charts.items()):
+                with cols[i % 2]:
+                    st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No data available for visualization. Please process data first.")
+            st.warning("No data available for visualization. Please ensure data is loaded or processed.")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
