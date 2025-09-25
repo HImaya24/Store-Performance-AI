@@ -1,3 +1,4 @@
+#collector/load_kaggle.py
 import os
 import pandas as pd
 import requests
@@ -126,7 +127,7 @@ def csv_to_events(csv_path: str, limit=None):
         print(f"Error reading CSV file: {e}")
         return []
 
-def send_events(events, batch_size=200):
+def send_events(events, batch_size=5):
     if not events:
         print("No events to send!")
         return
@@ -134,7 +135,7 @@ def send_events(events, batch_size=200):
     for i in range(0, len(events), batch_size):
         chunk = events[i:i+batch_size]
         try:
-            r = requests.post(COLLECTOR_URL, json=chunk, timeout=60)
+            r = requests.post(COLLECTOR_URL, json=chunk, timeout=300)
             r.raise_for_status()
             print(f"Sent {i+len(chunk)}/{len(events)} → {r.json()}")
         except Exception as e:

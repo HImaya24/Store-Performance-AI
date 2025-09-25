@@ -1,5 +1,4 @@
 
-#report agent main file 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 import httpx
@@ -19,8 +18,7 @@ async def report(store_id: str, confirm: bool = False):
             if r.status_code == 200:
                 kpi = r.json()
             elif r.status_code == 404:
-
-                
+                # Fallback to overall KPIs if store-specific not found
                 fallback_r = await client.get(f"{KPI_URL}/kpis")
                 if fallback_r.status_code == 200:
                     kpis = fallback_r.json()
@@ -43,7 +41,7 @@ async def report(store_id: str, confirm: bool = False):
                 if (requires_confirm and not confirm) else
                 "<p style='color:green'>Auto-approved.</p>")
 
-       
+        # Generate HTML with tables and charts
         html = f"""
         <html>
         <head>
@@ -65,7 +63,7 @@ async def report(store_id: str, confirm: bool = False):
             html += f"<tr><td>{k.replace('_', ' ').title()}</td><td>{value}</td></tr>"
         html += "</table>"
 
-      
+        # Breakdown sections with charts
         breakdowns = [
             ("Sales by Customer Category", by_category),
             ("Sales by Payment Method", by_payment),
