@@ -3,9 +3,17 @@ import os, uuid, datetime
 from typing import List, Dict, Any
 from fastapi import FastAPI
 import uvicorn
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+# Load environment variables from .env file
+env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(env_path)
+
+print(f"✅ Environment loaded - GROQ_API_KEY: {'GROQ_API_KEY' in os.environ}")
 
 app = FastAPI(title="Analyzer Agent")
 
@@ -31,75 +39,96 @@ def simple_ner_and_summary(ev: dict):
     explanation = f"Derived facts: type={etype}, fields={list(payload.keys())}"
     return text, tags, explanation
 
-# ---------- LLM wrapper (OpenAI v1 SDK) ----------
+# ---------- LLM wrapper (Groq) ----------
 def llm_insight_text(event: dict) -> Dict[str, Any]:
     """
-    Returns {"text": ..., "explanation": ..., "prompt": ..., "response_token_count": ...}
-    If LLM unavailable, raises Exception.
+    Groq LLM Insights with STRICT formatting
     """
-    from openai import OpenAI
-    client = OpenAI(timeout=OPENAI_TIMEOUT)
+    try:
+        from groq import Groq
+        
+        print(f"🔍 Advanced AI analyzing event: {event.get('event_id')}")
+        
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+        
+        # STRICTER PROMPT - be very explicit about format
+        prompt = f"""
+        Analyze this retail transaction data and provide insights. You MUST follow this EXACT format without any additional headers, titles, or markdown:
 
-    prompt = (
-        "You are a retail analytics assistant.\n"
-        "Given a single store event JSON, extract a concise insight sentence and a brief explanation.\n"
-        "Return two lines ONLY:\n"
-        "INSIGHT: <one short sentence>\n"
-        "EXPLAIN: <one short sentence>\n\n"
-        f"EVENT_JSON:\n{event}"
-    )
+        INSIGHT: [Write a concise 1-sentence insight about customer behavior or business impact]
+        ANALYSIS: [Write 2-3 sentences of detailed analysis about patterns, significance, or implications]
+        TAGS: [Provide 3-5 comma-separated relevant tags like customer_type,payment_method,season,behavior]
 
-    completion = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=120,
-    )
+        Transaction Data:
+        {json.dumps(event, indent=2)}
 
-    content = completion.choices[0].message.content.strip()
-    # Basic parse (robust enough for demo)
-    insight_line, explain_line = "", ""
-    for line in content.splitlines():
-        if line.upper().startswith("INSIGHT:"):
-            insight_line = line.split(":", 1)[1].strip()
-        elif line.upper().startswith("EXPLAIN:"):
-            explain_line = line.split(":", 1)[1].strip()
-
-    return {
-        "text": insight_line or "Insight unavailable",
-        "explanation": explain_line or "Explanation unavailable",
-        "prompt": prompt,
-        "response_token_count": completion.usage and completion.usage.completion_tokens or None,
-    }
-
-"""def simple_ner_and_summary(ev: dict):
-    etype = ev.get("event_type")
-    payload = ev.get("payload", {})
+        Important: Start directly with "INSIGHT:" without any headers, titles, or introductory text. Do not use markdown formatting like **bold** or headings.
+        """
+        
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,  # Lower temperature for more consistent formatting
+            max_tokens=250,
+        )
+        
+        content = completion.choices[0].message.content.strip()
+        print(f"✅ Advanced AI Response: {content}")
+        
+        # Clean the response - remove any markdown or headers
+        content = content.replace("**", "").replace("CUSTOMER BEHAVIOR:", "").strip()
+        
+        # Parse the structured response
+        insight, analysis, tags_str = "", "", ""
+        lines = content.splitlines()
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith("INSIGHT:") and not insight:
+                insight = line.replace("INSIGHT:", "").strip()
+            elif line.startswith("ANALYSIS:") and not analysis:
+                analysis = line.replace("ANALYSIS:", "").strip()
+            elif line.startswith("TAGS:") and not tags_str:
+                tags_str = line.replace("TAGS:", "").strip()
+        
+        # Fallback if parsing failed
+        if not insight and lines:
+            # Try to extract insight from first meaningful line
+            for line in lines:
+                if line and not line.startswith(("INSIGHT:", "ANALYSIS:", "TAGS:")) and len(line) > 10:
+                    insight = line.strip()
+                    break
+        
+        # Ensure we have at least basic content
+        if not insight:
+            insight = "AI-generated insight"
+        if not analysis:
+            analysis = "Detailed analysis of transaction patterns"
+        if not tags_str:
+            tags_str = "ai_analysis,retail"
+        
+        tags = [tag.strip() for tag in tags_str.split(",")] if tags_str else ["ai_generated"]
+        
+        return {
+            "text": insight,
+            "explanation": analysis,
+            "tags": tags,
+            "prompt": prompt[:100] + "...",
+            "response_token_count": completion.usage.completion_tokens if completion.usage else None,
+        }
+        
+    except Exception as ex:
+        print(f"❌ Advanced AI failed: {ex}")
+        # Fallback to basic analysis
+        text, tags, explanation = simple_ner_and_summary(event)
+        return {
+            "text": f"AI: {text}",
+            "explanation": f"Analysis: {explanation}",
+            "tags": tags,
+            "prompt": "fallback",
+            "response_token_count": 0
+        }
     
-    if etype == "sale":
-        amt = payload.get("amount", 0)
-        items = payload.get("items", [])
-        customer = payload.get("customer_name", "Unknown")
-        payment = payload.get("payment_method", "Unknown")
-        promotion = payload.get("promotion", "None")
-        
-        text = f"Sale to {customer}: {len(items)} items totaling ${amt:.2f} via {payment}"
-        if promotion != "None":
-            text += f" with promotion: {promotion}"
-            
-        tags = ["sale", payment.lower(), promotion.lower()]
-        if payload.get("discount_applied"):
-            tags.append("discount")
-            
-        explanation = f"Customer category: {payload.get('customer_category', 'Unknown')}, Store type: {payload.get('store_type', 'Unknown')}"
-        
-    else:
-        text = f"Event {etype}"
-        tags = [etype]
-        explanation = f"Derived facts: type={etype}, fields={list(payload.keys())}"
-        
-    return text, tags, explanation """
-
 def simple_ner_and_summary(ev: dict):
     etype = ev.get("event_type")
     payload = ev.get("payload", {})
