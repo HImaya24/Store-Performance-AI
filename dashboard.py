@@ -100,30 +100,36 @@ st.markdown("""
 # Agent endpoints with your specific ports
 AGENT_ENDPOINTS = {
     "collector": "http://localhost:8100",
-    "coordinator": "http://localhost:8110", 
+    "coordinator": "http://localhost:8110",
     "analyzer": "http://localhost:8101",
     "kpi": "http://localhost:8102",
     "report": "http://localhost:8103"
 }
 
 # Check agent status
+
+
 def check_agent_status(agent_name):
     try:
-        response = requests.get(f"{AGENT_ENDPOINTS[agent_name]}/health", timeout=2)
+        response = requests.get(
+            f"{AGENT_ENDPOINTS[agent_name]}/health", timeout=2)
         return response.status_code == 200, "Online" if response.status_code == 200 else "Offline"
     except:
         return False, "Offline"
 
 # Load data from collector agent
+
+
 @st.cache_data
 def load_data_from_collector():
     try:
-        response = requests.get(f"{AGENT_ENDPOINTS['collector']}/events", timeout=5)
+        response = requests.get(
+            f"{AGENT_ENDPOINTS['collector']}/events", timeout=30)
         if response.status_code == 200:
             return pd.DataFrame(response.json()), True
     except:
         pass
-    
+
     # Fallback: generate sample data
     dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
     data = {
@@ -136,30 +142,40 @@ def load_data_from_collector():
     return pd.DataFrame(data), False
 
 # Function to call coordinator agent
+
+
 def trigger_data_processing(process_type):
     try:
         # First get data from collector
-        response = requests.get(f"{AGENT_ENDPOINTS['collector']}/events", timeout=5)
+        response = requests.get(
+            f"{AGENT_ENDPOINTS['collector']}/events", timeout=30)
         if response.status_code != 200:
             return False, "Could not get data from collector"
-        
+
         events = response.json()
-        
+
+        # ✅ FIX: Limit events to 20 as per coordinator requirement
+        if len(events) > 20:
+            events = events[:20]  # Take only first 20 events
+            # st.info(f"Limited to first 20 events (coordinator limit: 20 events max)")
+
         # Send to coordinator for processing
         response = requests.post(
-            f"{AGENT_ENDPOINTS['coordinator']}/orchestrate", 
+            f"{AGENT_ENDPOINTS['coordinator']}/orchestrate",
             json={"events": events},
             headers={"X-API-KEY": "demo-key"},
-            timeout=30
+            timeout=300
         )
         return response.status_code == 200, response.json() if response.status_code == 200 else response.text
     except Exception as e:
         return False, str(e)
 
 # Function to get KPIs from KPI agent
+
+
 def get_kpis():
     try:
-        response = requests.get(f"{AGENT_ENDPOINTS['kpi']}/kpis", timeout=5)
+        response = requests.get(f"{AGENT_ENDPOINTS['kpi']}/kpis", timeout=30)
         if response.status_code == 200:
             return response.json(), True
     except:
@@ -167,28 +183,48 @@ def get_kpis():
     return None, False
 
 # Function to get analysis from analyzer agent
+
+
 def get_analysis(analysis_type):
     try:
         # First get data from collector
-        response = requests.get(f"{AGENT_ENDPOINTS['collector']}/events", timeout=5)
+        response = requests.get(f"{AGENT_ENDPOINTS['collector']}/events", timeout=30)
         if response.status_code != 200:
+            st.error(f"Collector returned status {response.status_code}")
             return None, False
         
         events = response.json()
         
-        # Send to analyzer
+        # ✅ CRITICAL FIX: Limit to only 3-5 events for testing
+        if len(events) > 5:
+            events = events[:5]  # Only send 5 events max
+            st.info(f"📊 Limited to 5 events for faster AI analysis")
+        
+        # Send to analyzer with reasonable timeout
         response = requests.post(
             f"{AGENT_ENDPOINTS['analyzer']}/analyze", 
             json=events,
-            timeout=10
+            timeout=60  # 60 seconds for 5 events is plenty
         )
+        
         if response.status_code == 200:
             return response.json(), True
-    except:
-        pass
-    return None, False
-
+        else:
+            st.error(f"Analyzer returned status {response.status_code}: {response.text}")
+            return None, False
+            
+    except requests.exceptions.ConnectionError:
+        st.error("Cannot connect to Analyzer agent. Make sure it's running on port 8101.")
+        return None, False
+    except requests.exceptions.Timeout:
+        st.error("Analyzer request timed out. Try with even fewer events.")
+        return None, False
+    except Exception as e:
+        st.error(f"Unexpected error: {str(e)}")
+        return None, False
 # Function to generate report from report agent
+
+
 def generate_report(store_id=None):
     """
     Calls the Report Agent to generate and return a report for a store.
@@ -198,177 +234,201 @@ def generate_report(store_id=None):
     if store_id is None:
         try:
             # Try to get available stores from KPI agent
-            response = requests.get(f"{AGENT_ENDPOINTS['kpi']}/kpis", timeout=5)
+            response = requests.get(
+                f"{AGENT_ENDPOINTS['kpi']}/kpis", timeout=5)
             if response.status_code == 200:
                 kpis = response.json()
                 if kpis and len(kpis) > 0:
                     # Get the first store ID from available KPIs
-                    store_id = kpis[0].get('store_id', 'Los Angeles')  # Fallback to Los Angeles
+                    # Fallback to Los Angeles
+                    store_id = kpis[0].get('store_id', 'Los Angeles')
                 else:
                     return {"status": "error", "message": "No KPI data found. Please run analysis first."}, False
             else:
                 return {"status": "error", "message": "Could not connect to KPI agent to find available stores."}, False
         except:
             return {"status": "error", "message": "Error finding available stores. Try specifying a store ID."}, False
-    
+
     try:
         # Call the correct endpoint to get the HTML report
         report_url = f"{AGENT_ENDPOINTS['report']}/report/{store_id}"
-        response = requests.get(report_url, timeout=15)
-        
+        response = requests.get(report_url, timeout=60)
+
         if response.status_code == 200:
             # Return the HTML content wrapped in the expected format
             return {"status": "success", "report_html": response.text, "store_id": store_id}, True
         else:
             # Handle cases where KPI data might not exist yet
             return {"status": "error", "message": f"Report agent returned status {response.status_code} for store '{store_id}'. Have you run analysis first?"}, False
-            
+
     except requests.exceptions.ConnectionError:
         return {"status": "error", "message": "Could not connect to Report Agent (is it running on 8103?)"}, False
     except Exception as e:
         return {"status": "error", "message": f"Error: {str(e)}"}, False
 
 # Function to create charts for visualization tab
+
+
 def create_visualization_charts(df):
     charts = {}
-    
+
     # Extract amount from payload if available
     if 'payload' in df.columns:
-        df['amount'] = df['payload'].apply(lambda x: x.get('amount', 0) if isinstance(x, dict) else 0)
-        df['items'] = df['payload'].apply(lambda x: x.get('items', 1) if isinstance(x, dict) else 1)
-    
+        df['amount'] = df['payload'].apply(lambda x: x.get(
+            'amount', 0) if isinstance(x, dict) else 0)
+        df['items'] = df['payload'].apply(lambda x: x.get(
+            'items', 1) if isinstance(x, dict) else 1)
+
     # 1. Sales Over Time by Store
     if 'store_id' in df.columns and 'ts' in df.columns and 'amount' in df.columns:
-        sales_by_store = df[df['event_type'] == 'sale'].groupby(['ts', 'store_id'])['amount'].sum().reset_index()
+        sales_by_store = df[df['event_type'] == 'sale'].groupby(
+            ['ts', 'store_id'])['amount'].sum().reset_index()
         fig_sales = px.line(sales_by_store, x='ts', y='amount', color='store_id',
-                           title="Sales Over Time by Store",
-                           labels={'amount': 'Sales Amount ($)', 'ts': 'Date', 'store_id': 'Store'})
+                            title="Sales Over Time by Store",
+                            labels={'amount': 'Sales Amount ($)', 'ts': 'Date', 'store_id': 'Store'})
         charts['sales_over_time'] = fig_sales
-    
+
     # 2. Event Type Distribution
     if 'event_type' in df.columns:
         event_counts = df['event_type'].value_counts().reset_index()
         event_counts.columns = ['event_type', 'count']
-        fig_events = px.pie(event_counts, values='count', names='event_type', 
-                           title="Distribution of Event Types")
+        fig_events = px.pie(event_counts, values='count', names='event_type',
+                            title="Distribution of Event Types")
         charts['event_distribution'] = fig_events
-    
+
     # 3. Monthly Sales Trend
     if 'ts' in df.columns and 'amount' in df.columns:
         df['month'] = df['ts'].dt.to_period('M').astype(str)
-        monthly_sales = df[df['event_type'] == 'sale'].groupby('month')['amount'].sum().reset_index()
-        fig_monthly = px.bar(monthly_sales, x='month', y='amount', 
-                            title="Monthly Sales Trend",
-                            labels={'amount': 'Total Sales ($)', 'month': 'Month'})
+        monthly_sales = df[df['event_type'] == 'sale'].groupby(
+            'month')['amount'].sum().reset_index()
+        fig_monthly = px.bar(monthly_sales, x='month', y='amount',
+                             title="Monthly Sales Trend",
+                             labels={'amount': 'Total Sales ($)', 'month': 'Month'})
         charts['monthly_sales'] = fig_monthly
-    
+
     # 4. Store Performance Comparison
     if 'store_id' in df.columns and 'amount' in df.columns:
-        store_performance = df[df['event_type'] == 'sale'].groupby('store_id')['amount'].agg(['sum', 'count', 'mean']).reset_index()
-        store_performance.columns = ['store_id', 'total_sales', 'transaction_count', 'avg_transaction']
-        
+        store_performance = df[df['event_type'] == 'sale'].groupby(
+            'store_id')['amount'].agg(['sum', 'count', 'mean']).reset_index()
+        store_performance.columns = [
+            'store_id', 'total_sales', 'transaction_count', 'avg_transaction']
+
         fig_performance = make_subplots(
             rows=1, cols=3,
-            subplot_titles=('Total Sales by Store', 'Number of Transactions', 'Average Transaction Value')
+            subplot_titles=('Total Sales by Store',
+                            'Number of Transactions', 'Average Transaction Value')
         )
-        
+
         fig_performance.add_trace(
-            go.Bar(x=store_performance['store_id'], y=store_performance['total_sales'], 
-                  name='Total Sales', marker_color='#1f77b4'),
+            go.Bar(x=store_performance['store_id'], y=store_performance['total_sales'],
+                   name='Total Sales', marker_color='#1f77b4'),
             row=1, col=1
         )
-        
+
         fig_performance.add_trace(
-            go.Bar(x=store_performance['store_id'], y=store_performance['transaction_count'], 
-                  name='Transaction Count', marker_color='#ff7f0e'),
+            go.Bar(x=store_performance['store_id'], y=store_performance['transaction_count'],
+                   name='Transaction Count', marker_color='#ff7f0e'),
             row=1, col=2
         )
-        
+
         fig_performance.add_trace(
-            go.Bar(x=store_performance['store_id'], y=store_performance['avg_transaction'], 
-                  name='Avg Transaction', marker_color='#2ca02c'),
+            go.Bar(x=store_performance['store_id'], y=store_performance['avg_transaction'],
+                   name='Avg Transaction', marker_color='#2ca02c'),
             row=1, col=3
         )
-        
-        fig_performance.update_layout(height=400, showlegend=False, title_text="Store Performance Comparison")
+
+        fig_performance.update_layout(
+            height=400, showlegend=False, title_text="Store Performance Comparison")
         charts['store_performance'] = fig_performance
-    
+
     # 5. Daily Sales Heatmap
     if 'ts' in df.columns and 'amount' in df.columns:
         df['day_of_week'] = df['ts'].dt.day_name()
         df['hour'] = df['ts'].dt.hour
-        daily_sales = df[df['event_type'] == 'sale'].groupby(['day_of_week', 'hour'])['amount'].sum().reset_index()
-        
-        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        daily_sales['day_of_week'] = pd.Categorical(daily_sales['day_of_week'], categories=days_order, ordered=True)
+        daily_sales = df[df['event_type'] == 'sale'].groupby(['day_of_week', 'hour'])[
+            'amount'].sum().reset_index()
+
+        days_order = ['Monday', 'Tuesday', 'Wednesday',
+                      'Thursday', 'Friday', 'Saturday', 'Sunday']
+        daily_sales['day_of_week'] = pd.Categorical(
+            daily_sales['day_of_week'], categories=days_order, ordered=True)
         daily_sales = daily_sales.sort_values('day_of_week')
-        
+
         fig_heatmap = px.density_heatmap(daily_sales, x='hour', y='day_of_week', z='amount',
-                                        title="Sales Heatmap by Day and Hour",
-                                        labels={'hour': 'Hour of Day', 'day_of_week': 'Day of Week', 'amount': 'Total Sales ($)'})
+                                         title="Sales Heatmap by Day and Hour",
+                                         labels={'hour': 'Hour of Day', 'day_of_week': 'Day of Week', 'amount': 'Total Sales ($)'})
         charts['sales_heatmap'] = fig_heatmap
-    
+
     # 6. Sales by Weekday
     if 'ts' in df.columns and 'amount' in df.columns:
         df['weekday'] = df['ts'].dt.day_name()
-        weekday_sales = df[df['event_type'] == 'sale'].groupby('weekday')['amount'].sum().reset_index()
-        
+        weekday_sales = df[df['event_type'] == 'sale'].groupby(
+            'weekday')['amount'].sum().reset_index()
+
         # Order by day of week
-        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        weekday_sales['weekday'] = pd.Categorical(weekday_sales['weekday'], categories=days_order, ordered=True)
+        days_order = ['Monday', 'Tuesday', 'Wednesday',
+                      'Thursday', 'Friday', 'Saturday', 'Sunday']
+        weekday_sales['weekday'] = pd.Categorical(
+            weekday_sales['weekday'], categories=days_order, ordered=True)
         weekday_sales = weekday_sales.sort_values('weekday')
-        
-        fig_weekday = px.bar(weekday_sales, x='weekday', y='amount', 
-                            title="Sales by Day of Week",
-                            labels={'amount': 'Total Sales ($)', 'weekday': 'Day of Week'})
+
+        fig_weekday = px.bar(weekday_sales, x='weekday', y='amount',
+                             title="Sales by Day of Week",
+                             labels={'amount': 'Total Sales ($)', 'weekday': 'Day of Week'})
         charts['weekday_sales'] = fig_weekday
-    
+
     # 7. Top Selling Stores
     if 'store_id' in df.columns and 'amount' in df.columns:
-        store_sales = df[df['event_type'] == 'sale'].groupby('store_id')['amount'].sum().reset_index()
+        store_sales = df[df['event_type'] == 'sale'].groupby(
+            'store_id')['amount'].sum().reset_index()
         store_sales = store_sales.sort_values('amount', ascending=False)
-        
-        fig_stores = px.bar(store_sales, x='store_id', y='amount', 
-                           title="Total Sales by Store",
-                           labels={'amount': 'Total Sales ($)', 'store_id': 'Store'})
+
+        fig_stores = px.bar(store_sales, x='store_id', y='amount',
+                            title="Total Sales by Store",
+                            labels={'amount': 'Total Sales ($)', 'store_id': 'Store'})
         charts['store_sales'] = fig_stores
-    
+
     return charts
 
 # Main dashboard
+
+
 def main():
-    st.markdown('<h1 class="main-header">Store Performance AI Dashboard</h1>', unsafe_allow_html=True)
-    
+    st.markdown('<h1 class="main-header">Store Performance AI Dashboard</h1>',
+                unsafe_allow_html=True)
+
     # Sidebar with agent status and controls
     with st.sidebar:
         st.header("🛠️ Agent Controls")
-        
+
         # Agent status
         st.subheader("Agent Status")
         for agent in AGENT_ENDPOINTS:
             is_online, status = check_agent_status(agent)
             status_class = "status-online" if is_online else "status-offline"
             port = AGENT_ENDPOINTS[agent].split(":")[-1]
-            st.markdown(f"**{agent.capitalize()}** <span class='port-label'>:{port}</span>: <span class='{status_class}'>{status}</span>", 
-                       unsafe_allow_html=True)
-        
+            st.markdown(f"**{agent.capitalize()}** <span class='port-label'>:{port}</span>: <span class='{status_class}'>{status}</span>",
+                        unsafe_allow_html=True)
+
         st.divider()
-        
+
         # Quick actions
         st.subheader("Quick Actions")
         if st.button("🔄 Refresh All Data"):
             st.rerun()
-            
+
         if st.button("📊 Generate Full Report"):
             with st.spinner("Generating comprehensive report..."):
                 report, success = generate_report("Los Angeles")
                 if success:
                     st.success("Report generated successfully!")
                     with st.expander("View Report"):
-                        st.components.v1.html(report["report_html"], height=400, scrolling=True)
+                        st.components.v1.html(
+                            report["report_html"], height=400, scrolling=True)
                 else:
-                    st.error(f"Failed to generate report: {report.get('message', 'Unknown error')}")
-        
+                    st.error(
+                        f"Failed to generate report: {report.get('message', 'Unknown error')}")
+
         st.divider()
         st.subheader("Agent Ports Configuration")
         st.info("""
@@ -378,43 +438,46 @@ def main():
         - KPI: :8102
         - Report: :8103
         """)
-    
+
     # Load data
     df, from_collector = load_data_from_collector()
-    
+
     # Convert date column if needed
     if 'ts' in df.columns:
         df['ts'] = pd.to_datetime(df['ts'])
         df['date'] = df['ts'].dt.date
         df['month'] = df['ts'].dt.to_period('M')
-    
+
     # Create tabs for each agent
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📥 Collector", 
-        "🔄 Coordinator", 
-        "📊 Visualization", 
-        "📈 KPI", 
-        "🔍 Analyzer", 
+        "📥 Collector",
+        "🔄 Coordinator",
+        "📊 Visualization",
+        "📈 KPI",
+        "🔍 Analyzer",
         "📋 Report"
     ])
-    
+
     # Collector Agent Tab
     with tab1:
         st.markdown('<div class="agent-section">', unsafe_allow_html=True)
-        st.markdown('<h2 class="agent-header">📥 Collector Agent <span class="port-label">:8100</span></h2>', unsafe_allow_html=True)
-        
+        st.markdown(
+            '<h2 class="agent-header">📥 Collector Agent <span class="port-label">:8100</span></h2>', unsafe_allow_html=True)
+
         # Display data source info
         if from_collector:
-            st.success("✅ Data loaded successfully from Collector agent (port 8100)")
+            st.success(
+                "✅ Data loaded successfully from Collector agent (port 8100)")
         else:
-            st.warning("⚠️ Using sample data (Collector agent on port 8100 unavailable)")
-        
+            st.warning(
+                "⚠️ Using sample data (Collector agent on port 8100 unavailable)")
+
         col1, col2 = st.columns([2, 1])
-        
+
         with col1:
             st.subheader("Data Preview")
             st.dataframe(df.head(10), use_container_width=True)
-        
+
         with col2:
             st.subheader("Data Summary")
             st.metric("Total Events", len(df))
@@ -422,105 +485,157 @@ def main():
                 st.metric("Unique Stores", df['store_id'].nunique())
             if 'event_type' in df.columns:
                 st.metric("Event Types", df['event_type'].nunique())
-        
+
         st.markdown('</div>', unsafe_allow_html=True)
-    
+
     # Coordinator Agent Tab
+
     with tab2:
         st.markdown('<div class="agent-section">', unsafe_allow_html=True)
-        st.markdown('<h2 class="agent-header">🔄 Coordinator Agent <span class="port-label">:8110</span></h2>', unsafe_allow_html=True)
-        
-        process_type = st.selectbox("Select Process Type", ["full_pipeline", "quick_scan"], key="process_select")
+        st.markdown(
+            '<h2 class="agent-header">🔄 Coordinator Agent <span class="port-label">:8110</span></h2>', unsafe_allow_html=True)
+
+        # Display available events count
+        try:
+            response = requests.get(
+                f"{AGENT_ENDPOINTS['collector']}/events", timeout=10)
+            if response.status_code == 200:
+                events = response.json()
+                st.info(f"📊 Collector has {len(events)} events available")
+
+                # Let user select how many events to process
+                max_events = min(len(events), 20)  # Coordinator limit is 20
+                event_count = st.slider(
+                    "Number of events to process",
+                    min_value=1,
+                    max_value=max_events,
+                    value=min(10, max_events),
+                    help=f"Coordinator limit: 20 events maximum"
+                )
+            else:
+                st.warning("Cannot get event count from collector")
+                event_count = 10  # Default
+        except:
+            st.warning("Cannot connect to collector to get event count")
+            event_count = 10  # Default
+
+        process_type = st.selectbox("Select Process Type", [
+                                    "full_pipeline", "quick_scan"], key="process_select")
 
         if st.button("Process Data", key="process_btn"):
             with st.spinner("Processing data through coordinator..."):
                 success, result = trigger_data_processing(process_type)
                 if success:
-                    st.success(f"Processing complete! Batch ID: {result.get('batch_id')}, Status: {result.get('status')}")
-                    st.json(result)
+                    if result.get('status') != 'rejected':
+                        st.success(
+                            f"✅ Processing complete! Batch ID: {result.get('batch_id')}, Status: {result.get('status')}")
+                        st.json(result)
+                    else:
+                        st.error(
+                            f"❌ Processing rejected: {result.get('message')}")
                 else:
-                    st.error(f"Processing failed: {result}")
+                    st.error(f"❌ Processing failed: {result}")
 
-        # Fetch and display audits
-        try:
-            response = requests.get(f"{AGENT_ENDPOINTS['coordinator']}/audits", timeout=5)
-            if response.status_code == 200:
-                audits = response.json()
-                if audits:
-                    st.subheader("Recent Batch Audits")
-                    # Display as table for overview
-                    audit_df = pd.DataFrame(audits)[['batch_id', 'ts', 'status', 'events_count']]
-                    st.dataframe(audit_df.sort_values('ts', ascending=False), use_container_width=True)
-                    
+            # Fetch and display audits
+            try:
+                response = requests.get(
+                    f"{AGENT_ENDPOINTS['coordinator']}/audits", timeout=5)
+                if response.status_code == 200:
+                    audits = response.json()
+                    if audits:
+                        st.subheader("Recent Batch Audits")
+                        # Filter out rejected batches for cleaner display
+                        valid_audits = [a for a in audits if a.get(
+                            'status') != 'rejected']
+
+                        if valid_audits:
+                            audit_df = pd.DataFrame(valid_audits)[
+                            ['batch_id', 'ts', 'status', 'events_count']]
+                            st.dataframe(audit_df.sort_values(
+                            'ts', ascending=False), use_container_width=True)
+
                     # Expandable details for each batch
-                    for audit in audits:
+                    for audit in valid_audits[:3]:  # Show only last 3
                         with st.expander(f"Details for Batch {audit['batch_id']} ({audit['status']})"):
                             st.write(f"Timestamp: {audit['ts']}")
-                            st.write(f"Events Processed: {audit.get('events_count', 'N/A')}")
+                            st.write(
+                                f"Events Processed: {audit.get('events_count', 'N/A')}")
                             if 'analyzer' in audit:
-                                st.write(f"Insights Generated: {audit['analyzer'].get('count', 'N/A')}")
-                                st.json(audit['analyzer'].get('insights_preview', []))
-                            if 'kpi_results' in audit:
-                                st.write("KPI Results:")
-                                st.json(audit['kpi_results'])
-                            if 'report' in audit:
-                                st.write("Report Note:")
-                                st.json(audit['report'])
-                            if 'error' in audit:
-                                st.error(f"Error: {audit['error']}")
+                                st.write(
+                                    f"Insights Generated: {audit['analyzer'].get('count', 'N/A')}")
+                                if 'insights_preview' in audit['analyzer']:
+                                    for insight in audit['analyzer']['insights_preview'][:3]:
+                                        st.write(
+                                            f"- {insight.get('text', 'No text')[:100]}...")
+                                if 'kpi_results' in audit:
+                                    st.write("KPI Results:")
+                                    st.json(audit['kpi_results'])
+                                if 'report' in audit:
+                                    st.write("Report Note:")
+                                    st.json(audit['report'])
+                            else:
+                                st.info(
+                                 "No successful batch audits yet. Process data to generate some.")
+                    else:
+                        st.info(
+                        "No audit logs available yet. Process data to generate some.")
                 else:
-                    st.info("No audit logs available yet. Process data to generate some.")
-            else:
-                st.warning("Could not fetch audits from coordinator.")
-        except Exception as e:
-            st.error(f"Error fetching audits: {str(e)}")
+                    st.warning("Could not fetch audits from coordinator.")
+            except Exception as e:
+                st.error(f"Error fetching audits: {str(e)}")
 
-        st.markdown('</div>', unsafe_allow_html=True)
-    
+    st.markdown('</div>', unsafe_allow_html=True)
+
     # Visualization Tab
     with tab3:
         st.markdown('<div class="agent-section">', unsafe_allow_html=True)
-        st.markdown('<h2 class="agent-header">📊 Visualization <span class="port-label"></span></h2>', unsafe_allow_html=True)
-        
+        st.markdown(
+            '<h2 class="agent-header">📊 Visualization <span class="port-label"></span></h2>', unsafe_allow_html=True)
+
         charts = create_visualization_charts(df)
-        
+
         if charts:
             cols = st.columns(2)
             for i, (title, fig) in enumerate(charts.items()):
                 with cols[i % 2]:
                     st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No data available for visualization. Please ensure data is loaded or processed.")
-        
+            st.warning(
+                "No data available for visualization. Please ensure data is loaded or processed.")
+
         st.markdown('</div>', unsafe_allow_html=True)
-    
+
     # KPI Agent Tab
     with tab4:
         st.markdown('<div class="agent-section">', unsafe_allow_html=True)
-        st.markdown('<h2 class="agent-header">📈 KPI Agent <span class="port-label">:8102</span></h2>', unsafe_allow_html=True)
-        
+        st.markdown(
+            '<h2 class="agent-header">📈 KPI Agent <span class="port-label">:8102</span></h2>', unsafe_allow_html=True)
+
         if st.button("Calculate KPIs", key="kpi_btn"):
             with st.spinner("Calculating KPIs..."):
                 kpis, success = get_kpis()
                 if success:
                     st.success("KPIs calculated successfully!")
-                    
+
                     if kpis and len(kpis) > 0:
                         # Display KPIs in columns
                         kpi_cols = st.columns(2)
-                        
+
                         for i, kpi in enumerate(kpis):
                             if i < 2:  # Show first 2 stores
                                 with kpi_cols[i]:
                                     metrics = kpi.get('metrics', {})
-                                    st.subheader(f"Store {kpi.get('store_id')}")
+                                    st.subheader(
+                                        f"Store {kpi.get('store_id')}")
                                     for metric_name, metric_value in metrics.items():
                                         if isinstance(metric_value, (int, float)):
                                             if any(word in metric_name for word in ['amount', 'aov']):
-                                                st.metric(metric_name.replace('_', ' ').title(), f"${metric_value:,.2f}")
+                                                st.metric(metric_name.replace(
+                                                    '_', ' ').title(), f"${metric_value:,.2f}")
                                             else:
-                                                st.metric(metric_name.replace('_', ' ').title(), f"{metric_value:,.0f}")
-                    
+                                                st.metric(metric_name.replace(
+                                                    '_', ' ').title(), f"{metric_value:,.0f}")
+
                         # Show remaining KPIs in expander
                         if len(kpis) > 2:
                             with st.expander("Show All Store KPIs"):
@@ -528,84 +643,99 @@ def main():
                                     if isinstance(kpi, dict):
                                         metrics = kpi.get('metrics', {})
                                     else:
-                                        st.error(f"KPI data format error: {kpi}")
+                                        st.error(
+                                            f"KPI data format error: {kpi}")
                                         metrics = {}
-                                    st.subheader(f"Store {kpi.get('store_id')}")
+                                    st.subheader(
+                                        f"Store {kpi.get('store_id')}")
                                     for metric_name, metric_value in metrics.items():
                                         if isinstance(metric_value, (int, float)):
                                             if any(word in metric_name for word in ['amount', 'aov']):
-                                                st.metric(metric_name.replace('_', ' ').title(), f"${metric_value:,.2f}")
+                                                st.metric(metric_name.replace(
+                                                    '_', ' ').title(), f"${metric_value:,.2f}")
                                             else:
-                                                st.metric(metric_name.replace('_', ' ').title(), f"{metric_value:,.0f}")
+                                                st.metric(metric_name.replace(
+                                                    '_', ' ').title(), f"{metric_value:,.0f}")
                     else:
                         st.info("No KPIs available yet. Process data first.")
                 else:
-                    st.error("Failed to calculate KPIs (KPI agent on port 8102 unavailable)")
-        
+                    st.error(
+                        "Failed to calculate KPIs (KPI agent on port 8102 unavailable)")
+
         st.markdown('</div>', unsafe_allow_html=True)
-    
+
     # Analyzer Agent Tab
     with tab5:
         st.markdown('<div class="agent-section">', unsafe_allow_html=True)
-        st.markdown('<h2 class="agent-header">🔍 Analyzer Agent <span class="port-label">:8101</span></h2>', unsafe_allow_html=True)
-        
+        st.markdown(
+            '<h2 class="agent-header">🔍 Analyzer Agent <span class="port-label">:8101</span></h2>', unsafe_allow_html=True)
+
         analysis_type = st.selectbox(
             "Select Analysis Type",
             ["sales_analysis", "inventory_analysis", "customer_analysis"],
             key="analysis_select"
         )
-        
+
         if st.button("Run Analysis", key="analyze_btn"):
             with st.spinner("Running analysis..."):
                 analysis, success = get_analysis(analysis_type)
                 if success:
                     st.success("Analysis completed successfully!")
-                    
+
                     if analysis and 'insights_list' in analysis:
                         insights = analysis['insights_list']
                         st.subheader(f"Top Insights ({len(insights)} total)")
-                        
+
                         # Show first 5 insights
                         for i, insight in enumerate(insights[:5]):
                             with st.expander(f"Insight {i+1}: {insight.get('text', 'No text')}"):
-                                st.write(f"**Store:** {insight.get('store_id')}")
-                                st.write(f"**Explanation:** {insight.get('explanation')}")
-                                st.write(f"**Tags:** {', '.join(insight.get('tags', []))}")
-                                st.write(f"**Confidence:** {insight.get('confidence')}")
-                    
+                                st.write(
+                                    f"**Store:** {insight.get('store_id')}")
+                                st.write(
+                                    f"**Explanation:** {insight.get('explanation')}")
+                                st.write(
+                                    f"**Tags:** {', '.join(insight.get('tags', []))}")
+                                st.write(
+                                    f"**Confidence:** {insight.get('confidence')}")
+
                     # Show analysis metadata
                     with st.expander("Analysis Details"):
                         st.json(analysis)
                 else:
-                    st.error("Failed to run analysis (Analyzer agent on port 8101 unavailable)")
-        
+                    st.error(
+                        "Failed to run analysis (Analyzer agent on port 8101 unavailable)")
+
         st.markdown('</div>', unsafe_allow_html=True)
-    
+
     # Report Agent Tab
     with tab6:
         st.markdown('<div class="agent-section">', unsafe_allow_html=True)
-        st.markdown('<h2 class="agent-header">📋 Report Agent <span class="port-label">:8103</span></h2>', unsafe_allow_html=True)
-        
+        st.markdown(
+            '<h2 class="agent-header">📋 Report Agent <span class="port-label">:8103</span></h2>', unsafe_allow_html=True)
+
         # Get available stores from data
         available_stores = []
         if 'store_id' in df.columns:
             available_stores = df['store_id'].unique().tolist()
-        
+
         if available_stores:
-            selected_store = st.selectbox("Select Store", available_stores, key="report_store")
+            selected_store = st.selectbox(
+                "Select Store", available_stores, key="report_store")
         else:
             selected_store = "Los Angeles"  # Default fallback
             st.info("No store data available. Using default store.")
-        
+
         if st.button("Generate Report", key="report_btn"):
             with st.spinner("Generating report..."):
                 report, success = generate_report(selected_store)
                 if success:
-                    st.success(f"Report for {selected_store} generated successfully!")
-                    
+                    st.success(
+                        f"Report for {selected_store} generated successfully!")
+
                     # Display the HTML report
-                    st.components.v1.html(report["report_html"], height=600, scrolling=True)
-                    
+                    st.components.v1.html(
+                        report["report_html"], height=600, scrolling=True)
+
                     # Add download button
                     st.download_button(
                         label="📥 Download Report",
@@ -614,9 +744,11 @@ def main():
                         mime="text/html"
                     )
                 else:
-                    st.error(f"Failed to generate report: {report.get('message', 'Unknown error')}")
-        
+                    st.error(
+                        f"Failed to generate report: {report.get('message', 'Unknown error')}")
+
         st.markdown('</div>', unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     main()
