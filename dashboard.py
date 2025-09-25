@@ -120,20 +120,40 @@ def load_data_from_collector():
     try:
         response = requests.get(f"{AGENT_ENDPOINTS['collector']}/events", timeout=5)
         if response.status_code == 200:
-            return pd.DataFrame(response.json()), True
-    except:
-        pass
+            df = pd.DataFrame(response.json())
+            
+           
+            if 'payload' in df.columns:
+                payload_df = df['payload'].apply(lambda x: x if isinstance(x, dict) else {})
+                payload_df = pd.json_normalize(payload_df)
+                df = pd.concat([df.drop(columns=['payload']), payload_df], axis=1)
+            
+           
+            if 'ts' in df.columns:
+                df['ts'] = pd.to_datetime(df['ts'], errors='coerce', infer_datetime_format=True)
+                df = df.dropna(subset=['ts'])
+            
+            return df, True
+    except Exception as e:
+        st.warning(f"Collector agent not available, using sample data. Error: {str(e)}")
     
-    # Fallback: generate sample data
+   
     dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
     data = {
         'event_id': [f"event_{i}" for i in range(len(dates))],
         'store_id': np.random.choice(['Los Angeles', 'New York', 'Chicago', 'Miami', 'Seattle'], len(dates)),
         'ts': dates,
         'event_type': np.random.choice(['sale', 'inventory', 'visit', 'return', 'restock'], len(dates), p=[0.5, 0.2, 0.15, 0.1, 0.05]),
-        'payload': [{'amount': np.random.uniform(10, 500), 'items': np.random.randint(1, 10)} for _ in range(len(dates))]
+        'amount': np.random.uniform(10, 500, len(dates)),
+        'items': np.random.randint(1, 10, len(dates)),
+        'customer_name': np.random.choice(['Alice', 'Bob', 'Charlie', 'David', 'Eve'], len(dates)),
+        'payment_method': np.random.choice(['Cash', 'Card', 'Mobile Payment'], len(dates)),
+        'store_type': np.random.choice(['Retail', 'Warehouse Club', 'Online'], len(dates)),
+        'discount_applied': np.random.choice([True, False], len(dates))
     }
-    return pd.DataFrame(data), False
+    df = pd.DataFrame(data)
+    return df, False
+
 
 # Function to call coordinator agent
 def trigger_data_processing(process_type):
