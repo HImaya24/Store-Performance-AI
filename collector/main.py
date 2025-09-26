@@ -41,7 +41,7 @@ async def collect_batch(events: List[StoreEvent]):
         EVENT_STORE.append(ev)
         sanitized.append(ev)
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=120) as client:
         try:
             await client.post(
                 COORDINATOR_URL,
