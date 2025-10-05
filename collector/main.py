@@ -6,7 +6,7 @@ from common.models import StoreEvent
 import httpx
 import uvicorn
 from dotenv import load_dotenv
-from datetime import datetime  # Make sure this import exists
+from datetime import datetime
 
 load_dotenv()
 
@@ -16,6 +16,7 @@ EVENT_STORE = []
 COORDINATOR_URL = os.environ.get("COORDINATOR_URL", "http://localhost:8110/orchestrate")
 API_KEY = os.environ.get("API_KEY", "demo-key")
 
+#Redact sensitive data
 EMAIL_RE = re.compile(r"[\w\.-]+@[\w\.-]+")
 PHONE_RE = re.compile(r"\+?\d[\d\-\s]{7,}\d")
 
@@ -34,14 +35,14 @@ async def collect_batch(events: List[StoreEvent]):
         ev = e.dict()
         ev["payload_redacted"] = redact(ev.get("payload", {}))
         
-        # FIX: Convert datetime to ISO string for JSON serialization
+        #Convert datetime to ISO string for JSON serialization
         if isinstance(ev.get("ts"), datetime):
             ev["ts"] = ev["ts"].isoformat()
         
         EVENT_STORE.append(ev)
         sanitized.append(ev)
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=120) as client:
         try:
             await client.post(
                 COORDINATOR_URL,
