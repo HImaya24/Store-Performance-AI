@@ -125,14 +125,9 @@ def load_data_from_collector():
     try:
         response = requests.get(
             f"{AGENT_ENDPOINTS['collector']}/events", timeout=30)
+        
         if response.status_code == 200:
-<<<<<<< HEAD
-            return pd.DataFrame(response.json()), True
-    except:
-        pass
 
-    # Fallback: generate sample data
-=======
             df = pd.DataFrame(response.json())
             
            
@@ -151,7 +146,7 @@ def load_data_from_collector():
         st.warning(f"Collector agent not available, using sample data. Error: {str(e)}")
     
    
->>>>>>> d8d5dbdd1f84e77eceb81b9ca68b72b4897cf80d
+   
     dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
     data = {
         'event_id': [f"event_{i}" for i in range(len(dates))],
