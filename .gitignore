@@ -1,3 +1,4 @@
+# ==================== PYTHON ====================
 # Virtual environment
 venv/
 env/
@@ -28,25 +29,92 @@ wheels/
 *.egg
 MANIFEST
 
-# IDE files
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# ==================== REACT/NODE.JS ====================
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Production builds
+build/
+dist/
+out/
+
+# Next.js build output
+.next
+
+# Nuxt.js build output
+.nuxt
+
+# Gatsby build output
+public/
+
+# ==================== ENVIRONMENT VARIABLES ====================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ==================== IDE AND EDITOR FILES ====================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Jupyter notebooks
-.ipynb_checkpoints/
+# ==================== OS GENERATED FILES ====================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Environment variables
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Logs
-logs/
+# ==================== LOGS ====================
+logs
 *.log
+
+# ==================== COVERAGE ====================
+coverage/
+.nyc_output/
+htmlcov/
+
+# ==================== CACHE ====================
+.cache
+.parcel-cache
+.pytest_cache/
+.mypy_cache/
+
+# ==================== OTHER ====================
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Serverless directories
+.serverless
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
 
 # Data files (optional - remove if you want to track data)
 *.csv

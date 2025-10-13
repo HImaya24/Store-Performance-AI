@@ -6,11 +6,23 @@ from common.models import StoreEvent
 import httpx
 import uvicorn
 from dotenv import load_dotenv
-from datetime import datetime  # Make sure this import exists
+from datetime import datetime  
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
 app = FastAPI(title="Collector Agent")
+
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # React app origin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 EVENT_STORE = []
 
 COORDINATOR_URL = os.environ.get("COORDINATOR_URL", "http://localhost:8110/orchestrate")
