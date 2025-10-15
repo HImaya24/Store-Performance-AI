@@ -164,13 +164,7 @@ def check_agent_status(agent_name):
 @st.cache_data
 def load_data_from_collector():
     try:
-<<<<<<< HEAD
-        response = requests.get(
-            f"{AGENT_ENDPOINTS['collector']}/events", timeout=30)
-        
-=======
         response = requests.get(f"{AGENT_ENDPOINTS['collector']}/events", timeout=30)
->>>>>>> 57137ae35c363315aa07d833fcad6191e6406ce9
         if response.status_code == 200:
 
             df = pd.DataFrame(response.json())
@@ -200,14 +194,6 @@ def load_data_from_collector():
         'store_id': np.random.choice(['Los Angeles', 'New York', 'Chicago', 'Miami', 'Seattle'], len(dates)),
         'ts': dates,
         'event_type': np.random.choice(['sale', 'inventory', 'visit', 'return', 'restock'], len(dates), p=[0.5, 0.2, 0.15, 0.1, 0.05]),
-<<<<<<< HEAD
-        'amount': np.random.uniform(10, 500, len(dates)),
-        'items': np.random.randint(1, 10, len(dates)),
-        'customer_name': np.random.choice(['Alice', 'Bob', 'Charlie', 'David', 'Eve'], len(dates)),
-        'payment_method': np.random.choice(['Cash', 'Card', 'Mobile Payment'], len(dates)),
-        'store_type': np.random.choice(['Retail', 'Warehouse Club', 'Online'], len(dates)),
-        'discount_applied': np.random.choice([True, False], len(dates))
-=======
         'payload': [{
             'amount': np.random.uniform(10, 500), 
             'items': np.random.choice(products, np.random.randint(1, 4)),
@@ -215,7 +201,6 @@ def load_data_from_collector():
             'payment_method': np.random.choice(['Credit Card', 'Debit Card', 'Cash', 'Digital Wallet']),
             'season': np.random.choice(['winter', 'spring', 'summer', 'fall'])
         } for _ in range(len(dates))]
->>>>>>> 57137ae35c363315aa07d833fcad6191e6406ce9
     }
     df = pd.DataFrame(data)
     return df, False
