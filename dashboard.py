@@ -168,12 +168,11 @@ def load_data_from_collector():
         if response.status_code == 200:
 
             df = pd.DataFrame(response.json())
-            
            
             if 'payload' in df.columns:
                 payload_df = df['payload'].apply(lambda x: x if isinstance(x, dict) else {})
                 payload_df = pd.json_normalize(payload_df)
-                df = pd.concat([df.drop(columns=['payload']), payload_df], axis=1)
+                df = pd.concat([df.reset_index(drop=True), payload_df.reset_index(drop=True)], axis=1)
             
            
             if 'ts' in df.columns:

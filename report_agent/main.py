@@ -5,6 +5,13 @@ import datetime
 import json
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+from groq import Groq
+
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 app = FastAPI(title="Report Agent")
 
@@ -18,6 +25,28 @@ app.add_middleware(
 )
 
 KPI_URL = "http://localhost:8102"
+
+def generate_ai_summary(metrics: dict) -> str:
+    """
+    Generate natural language insights from store performance metrics.
+    Uses Groq's LLaMA 3 model for analysis.
+    """
+    prompt = f"""
+    You are an expert retail data analyst. Analyze this store's performance data
+    and give 3 clear, concise business insights.
+    Data:
+    {json.dumps(metrics, indent=2)}
+    """
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",  
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ AI summary generation failed: {str(e)}"
+
 
 @app.get("/report/{store_id}", response_class=HTMLResponse)
 async def report(store_id: str, confirm: bool = False):
@@ -45,6 +74,8 @@ async def report(store_id: str, confirm: bool = False):
         by_category = kpi.get("by_customer_category", {})
         by_payment = kpi.get("by_payment_method", {})
         by_promotion = kpi.get("by_promotion", {})
+
+        ai_summary = generate_ai_summary(metrics)
 
         requires_confirm = metrics.get("average_order_value", 0) > 1000
         note = ("<p style='color:orange'>Needs human confirmation (?confirm=true).</p>"
@@ -95,6 +126,12 @@ async def report(store_id: str, confirm: bool = False):
                     }});
                 </script>
                 """
+        html += f"""
+            <h2> AI Insights</h2>
+            <div style="background-color:#f4f4f4; padding:10px; border-radius:8px; margin-top:10px;">
+                <p>{ai_summary}</p>
+            </div>
+        """
 
         html += "<p>Insights & explanations are logged via Coordinator audit.</p></body></html>"
         return HTMLResponse(content=html)
