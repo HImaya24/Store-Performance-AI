@@ -1,8 +1,8 @@
-#coordinator/main.py
+# coordinator/main.py
 import os
 import uuid
 import datetime
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 import httpx
 import uvicorn
 from dotenv import load_dotenv
@@ -34,11 +34,9 @@ def health_check():
     return {"status": "healthy", "batches_processed": len(AUDIT_STORE)}
 
 @app.post("/orchestrate")
-async def orchestrate(payload: dict, request: Request):
-    # Validate API key
-    if request.headers.get("X-API-KEY") != API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
+async def orchestrate(payload: dict):
+    print(f"📦 Received orchestration request with {len(payload.get('events', []))} events")
+    
     events = payload.get("events", [])
     
     # Validate event count
@@ -56,8 +54,8 @@ async def orchestrate(payload: dict, request: Request):
             "message": "No events provided"
         }
     
-    # Use smaller batch size - CRITICAL for preventing timeouts
-    batch_size = int(os.environ.get("BATCH_SIZE", 3))  # Reduced to 3!
+    # Use smaller batch size
+    batch_size = int(os.environ.get("BATCH_SIZE", 3))
     
     print(f"\n{'='*60}")
     print(f"📦 NEW BATCH: Processing {len(events)} events")
@@ -95,13 +93,13 @@ async def orchestrate(payload: dict, request: Request):
             async with httpx.AsyncClient(timeout=300.0) as client:
                 print(f"   ⏳ Sending to analyzer at {ANALYZER_URL}...")
                 
-                # Send batch to analyzer
+                # Send batch to analyzer - NO AUTH HEADERS
                 a = await client.post(ANALYZER_URL, json=batch_events)
                 
                 print(f"   📡 Analyzer response status: {a.status_code}")
                 
                 if a.status_code != 200:
-                    error_msg = f"Batch {i+1}: Analyzer returned status {a.status_code}"
+                    error_msg = f"Batch {i+1}: Analyzer returned status {a.status_code} - {a.text}"
                     print(f"   ❌ {error_msg}")
                     AUDIT_STORE[batch_id]["errors"].append(error_msg)
                     failed_batches += 1

@@ -27,7 +27,7 @@ const CoordinatorTab = () => {
     setResult(null);
     
     try {
-      // First get data from collector (like your Streamlit code does)
+      // First get data from collector
       const collectorResponse = await fetch('http://localhost:8100/events');
       if (!collectorResponse.ok) {
         throw new Error('Could not get data from collector');
@@ -35,7 +35,7 @@ const CoordinatorTab = () => {
       
       let events = await collectorResponse.json();
       
-      // Limit events to coordinator requirement (like your Streamlit code)
+      // Limit events to coordinator requirement 
       if (events.length > 20) {
         events = events.slice(0, 20);
       }
@@ -45,7 +45,7 @@ const CoordinatorTab = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-KEY': 'demo-key', // Add the API key header
+          'X-API-KEY': 'demo-key', 
         },
         body: JSON.stringify({ events }),
       });
@@ -95,22 +95,7 @@ const CoordinatorTab = () => {
               </Select>
             </FormControl>
 
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom>
-                Number of events to process: {eventCount}
-              </Typography>
-              <Slider
-                value={eventCount}
-                onChange={(e, newValue) => setEventCount(newValue)}
-                min={1}
-                max={20}
-                marks={[
-                  { value: 1, label: '1' },
-                  { value: 10, label: '10' },
-                  { value: 20, label: '20' },
-                ]}
-              />
-            </Box>
+            
 
             <Button
               variant="contained"
