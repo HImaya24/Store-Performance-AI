@@ -5,8 +5,19 @@ import httpx
 import datetime
 import json
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Report Agent")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 KPI_URL = "http://localhost:8102"
 
 @app.get("/report/{store_id}", response_class=HTMLResponse)
