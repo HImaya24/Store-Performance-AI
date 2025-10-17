@@ -150,3 +150,12 @@ export const generateReport = async (storeId) => {
     return { success: false, error: error.message };
   }
 };
+
+// ✅ New function to fetch AI-generated summary
+export const fetchReportSummary = async (storeId) => {
+  const response = await fetch(`http://localhost:8103/report/json/${storeId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch AI summary: ${response.statusText}`);
+  }
+  return await response.json();
+};
