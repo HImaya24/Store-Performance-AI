@@ -31,3 +31,12 @@ class KPIResult(BaseModel):
     by_customer_category: Dict[str, float] = {}
     by_payment_method: Dict[str, float] = {}
     by_promotion: Dict[str, float] = {}
+
+class User(BaseModel):
+    username: str
+    password: str  # In real app, this would be hashed
+    role: str = "user"
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str

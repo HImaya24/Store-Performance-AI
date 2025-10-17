@@ -1,4 +1,6 @@
+// services/api.js
 import axios from 'axios';
+import { authService } from './auth';
 
 const AGENT_ENDPOINTS = {
   collector: "http://localhost:8100",
@@ -12,12 +14,43 @@ export const api = axios.create({
   timeout: 30000,
 });
 
+// Add request interceptor to automatically include auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = authService.getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle auth errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      authService.logout();
+      // You can redirect to login page here if needed
+      console.error('Authentication failed - please login again');
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Agent status check
 export const checkAgentStatus = async (agentName) => {
   try {
     const response = await api.get(`${AGENT_ENDPOINTS[agentName]}/health`);
     return { status: 'online', lastChecked: new Date().toISOString() };
-  } catch {
+  } catch (error) {
+    if (error.response?.status === 401) {
+      authService.logout();
+      throw new Error('Authentication required');
+    }
     return { status: 'offline', lastChecked: new Date().toISOString() };
   }
 };
@@ -36,7 +69,12 @@ export const loadDataFromCollector = async () => {
   try {
     const response = await api.get(`${AGENT_ENDPOINTS.collector}/events`);
     return { data: response.data, fromCollector: true };
-  } catch {
+  } catch (error) {
+    if (error.response?.status === 401) {
+      authService.logout();
+      throw new Error('Authentication required. Please login again.');
+    }
+    
     // Generate sample data like your Streamlit fallback
     const dates = Array.from({ length: 100 }, (_, i) => 
       new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString()
@@ -70,6 +108,10 @@ export const semanticSearch = async (query) => {
     });
     return response.data;
   } catch (error) {
+    if (error.response?.status === 401) {
+      authService.logout();
+      throw new Error('Authentication required. Please login again.');
+    }
     return { error: error.message, results: [] };
   }
 };
@@ -99,7 +141,8 @@ export const triggerDataProcessing = async (processType) => {
     return { success: true, data: response.data };
   } catch (error) {
     if (error.response?.status === 401) {
-      return { success: false, error: 'Authentication failed. Check API key.' };
+      authService.logout();
+      return { success: false, error: 'Authentication failed. Please login again.' };
     }
     return { success: false, error: error.message };
   }
@@ -122,6 +165,10 @@ export const getAnalysis = async (analysisType) => {
     
     return { success: true, data: response.data };
   } catch (error) {
+    if (error.response?.status === 401) {
+      authService.logout();
+      throw new Error('Authentication required. Please login again.');
+    }
     if (error.response?.status === 422) {
       return { 
         success: false, 
@@ -131,12 +178,17 @@ export const getAnalysis = async (analysisType) => {
     return { success: false, error: error.message };
   }
 };
+
 // Get KPIs
 export const getKPIs = async () => {
   try {
     const response = await api.get(`${AGENT_ENDPOINTS.kpi}/kpis`);
     return { success: true, data: response.data };
   } catch (error) {
+    if (error.response?.status === 401) {
+      authService.logout();
+      throw new Error('Authentication required. Please login again.');
+    }
     return { success: false, error: error.message };
   }
 };
@@ -147,6 +199,10 @@ export const generateReport = async (storeId) => {
     const response = await api.get(`${AGENT_ENDPOINTS.report}/report/${storeId}`);
     return { success: true, data: response.data };
   } catch (error) {
+    if (error.response?.status === 401) {
+      authService.logout();
+      throw new Error('Authentication required. Please login again.');
+    }
     return { success: false, error: error.message };
   }
 };
@@ -159,3 +215,26 @@ export const fetchReportSummary = async (storeId) => {
   }
   return await response.json();
 };
+// Login function
+export const login = async (username, password) => {
+  try {
+    const response = await api.post(`${AGENT_ENDPOINTS.collector}/login`, {
+      username,
+      password
+    });
+    return { success: true, data: response.data };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.response?.data?.detail || 'Login failed' 
+    };
+  }
+};
+
+// Logout function
+export const logout = () => {
+  authService.logout();
+};
+
+// Export auth service for use in components
+export { authService };

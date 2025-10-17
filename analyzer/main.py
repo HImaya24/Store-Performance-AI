@@ -1,22 +1,21 @@
-# analyzer/main.py 
+# analyzer/main.py
 import os, uuid, json
 from typing import List, Dict, Any
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 import uvicorn
 from dotenv import load_dotenv
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from fastapi import FastAPI, HTTPException  
-from .retrieval_system import SemanticSearchEngine  
 import requests
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 load_dotenv()
 
 app = FastAPI(title="Analyzer Agent")
-
-search_engine = SemanticSearchEngine()
 
 # Add CORS middleware
 app.add_middleware(
@@ -37,6 +36,85 @@ print(f"   GROQ_API_KEY: {'***' + GROQ_API_KEY[-4:] if GROQ_API_KEY else 'NOT SE
 
 # ThreadPool for parallel LLM calls
 executor = ThreadPoolExecutor(max_workers=5)
+
+# Simple Semantic Search Engine
+class SemanticSearchEngine:
+    def __init__(self):
+        self.vectorizer = TfidfVectorizer(stop_words='english', max_features=1000)
+        self.documents = []
+        self.document_metadata = []
+        self.fitted = False
+    
+    def index_events(self, events: List[dict]):
+        """Index events for semantic search"""
+        documents = []
+        metadata = []
+        
+        for event in events:
+            if event.get("event_type") == "sale":
+                payload = event.get("payload", {})
+                
+                # Create searchable document
+                doc_parts = [
+                    f"store_{event.get('store_id', '')}",
+                    f"season_{payload.get('season', '')}",
+                    f"customer_{payload.get('customer_category', '')}",
+                    f"payment_{payload.get('payment_method', '')}",
+                    f"promotion_{payload.get('promotion', '')}",
+                ]
+                
+                # Add products
+                products = payload.get("items", [])
+                if isinstance(products, list):
+                    doc_parts.extend([f"product_{p}" for p in products])
+                else:
+                    doc_parts.append(f"product_{products}")
+                
+                document_text = " ".join(doc_parts).lower()
+                documents.append(document_text)
+                metadata.append({
+                    "event_id": event.get("event_id"),
+                    "store_id": event.get("store_id"),
+                    "amount": payload.get("amount", 0),
+                    "products": products,
+                    "timestamp": event.get("ts")
+                })
+        
+        if documents:
+            self.documents = documents
+            self.document_metadata = metadata
+            self.vectorizer.fit(documents)
+            self.fitted = True
+    
+    def search_similar_patterns(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+        """Find similar patterns using semantic search"""
+        if not self.fitted or not self.documents:
+            print("❌ Search engine not ready - no data indexed")
+            return []
+        
+        # Transform query and documents
+        query_vec = self.vectorizer.transform([query.lower()])
+        doc_vecs = self.vectorizer.transform(self.documents)
+        
+        # Calculate similarities
+        similarities = cosine_similarity(query_vec, doc_vecs).flatten()
+        
+        # Get top k results
+        top_indices = np.argsort(similarities)[-top_k:][::-1]
+        
+        results = []
+        for idx in top_indices:
+            if similarities[idx] > 0.05:  # Lower threshold for more results
+                results.append({
+                    "metadata": self.document_metadata[idx],
+                    "similarity_score": float(similarities[idx]),
+                    "document_preview": self.documents[idx][:100] + "..."
+                })
+        
+        print(f"📊 Found {len(results)} results for query: '{query}'")
+        return results
+
+search_engine = SemanticSearchEngine()
 
 def test_groq_connection():
     """Test if we can connect to Groq API"""
@@ -201,7 +279,6 @@ async def llm_insight_async(event):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(executor, llm_insight_text, event)
 
-
 def load_events_from_collector() -> List[dict]:
     """
     Load events from the Collector service
@@ -220,7 +297,7 @@ def load_events_from_collector() -> List[dict]:
     except Exception as e:
         print(f"❌ Failed to load events from Collector: {e}")
         return []
-    
+
 @app.post("/analyze")
 async def analyze(events: List[dict]):
     print(f"\n{'='*60}")
@@ -325,6 +402,7 @@ async def analyze(events: List[dict]):
         "mode": "LLM" if USE_LLM and GROQ_API_KEY else "SIMPLE",
         "llm_insights_count": llm_count
     }
+
 @app.post("/semantic-search")
 async def semantic_search(query: str):
     """
@@ -384,80 +462,6 @@ def health():
         "llm_enabled": USE_LLM,
         "groq_api_available": bool(GROQ_API_KEY),
         "groq_working": groq_working
-    }
-
-@app.get("/debug/env")
-def debug_env():
-    """Show all relevant environment variables"""
-    return {
-        "USE_LLM": USE_LLM,
-        "GROQ_API_KEY_set": bool(GROQ_API_KEY),
-        "GROQ_API_KEY_length": len(GROQ_API_KEY) if GROQ_API_KEY else 0,
-        "groq_test_result": groq_message,
-        "python_path": os.environ.get("PYTHONPATH", "Not set"),
-        "all_env_keys": [k for k in os.environ.keys() if "GROQ" in k or "LLM" in k or "API" in k]
-    }
-
-@app.get("/debug/data-status")
-async def debug_data_status():
-    """Check what data we have access to"""
-    try:
-        # Check Collector
-        collector_events = load_events_from_collector()
-        
-        return {
-            "collector_events_available": len(collector_events),
-            "search_engine_indexed": len(search_engine.documents),
-            "search_engine_ready": search_engine.fitted,
-            "status": "READY" if search_engine.fitted else "NEEDS_DATA"
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/debug/collector-events")
-async def debug_collector_events():
-    """Check what events are available from Collector"""
-    events = load_events_from_collector()
-    return {
-        "total_events": len(events),
-        "sample_events": events[:2] if events else []
-    }
-
-@app.get("/debug/search-terms")
-async def debug_search_terms():
-    """See what terms are available for searching"""
-    if not search_engine.fitted:
-        return {"error": "Search engine not fitted"}
-    
-    # Get the feature names (words) from the vectorizer
-    feature_names = search_engine.vectorizer.get_feature_names_out()
-    
-    # Show sample documents
-    sample_docs = search_engine.documents[:5] if search_engine.documents else []
-    
-    return {
-        "total_documents": len(search_engine.documents),
-        "available_search_terms": feature_names.tolist()[:50],  # First 50 terms
-        "sample_documents": sample_docs
-    }
-
-@app.get("/debug/search-status")
-async def debug_search_status():
-    """Check search engine status"""
-    return {
-        "search_engine_ready": search_engine.fitted,
-        "documents_indexed": len(search_engine.documents),
-        "status": "READY" if search_engine.fitted and search_engine.documents else "NO DATA"
-    }
-
-@app.get("/debug/sample-search/{query}")
-async def debug_sample_search(query: str):
-    """Test search directly"""
-    results = search_engine.search_similar_patterns(query, top_k=5)
-    return {
-        "query": query,
-        "results": results,
-        "total_matches": len(results)
     }
 
 if __name__ == "__main__":
