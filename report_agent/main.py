@@ -47,7 +47,6 @@ def generate_ai_summary(metrics: dict) -> str:
     except Exception as e:
         return f"⚠️ AI summary generation failed: {str(e)}"
 
-
 @app.get("/report/{store_id}", response_class=HTMLResponse)
 async def report(store_id: str, confirm: bool = False):
     try:
@@ -76,6 +75,7 @@ async def report(store_id: str, confirm: bool = False):
         by_promotion = kpi.get("by_promotion", {})
 
         ai_summary = generate_ai_summary(metrics)
+
 
         requires_confirm = metrics.get("average_order_value", 0) > 1000
         note = ("<p style='color:orange'>Needs human confirmation (?confirm=true).</p>"
