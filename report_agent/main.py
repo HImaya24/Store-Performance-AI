@@ -46,6 +46,66 @@ def generate_ai_summary(metrics: dict) -> str:
         return response.choices[0].message.content
     except Exception as e:
         return f"⚠️ AI summary generation failed: {str(e)}"
+    
+@app.get("/report/json/{store_id}")
+async def report_json(store_id: str):
+    """
+    Returns KPI data and AI-generated summary for a store.
+    Correctly handles nested KPI data and provides fallback if metrics are missing.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15) as http_client:
+            # Fetch store-specific KPI from KPI agent
+            r = await http_client.get(f"{KPI_URL}/kpis/{store_id}")
+            if r.status_code == 200:
+                kpi_data = r.json()
+            elif r.status_code == 404:
+                # Fallback: get overall KPIs if store-specific not found
+                fallback_r = await http_client.get(f"{KPI_URL}/kpis")
+                if fallback_r.status_code == 200:
+                    kpis_list = fallback_r.json().get("data", [])
+                    # pick the first one as fallback
+                    kpi_data = {"success": True, "data": [kpis_list[0]]} if kpis_list else {"success": False, "data": []}
+                else:
+                    raise HTTPException(status_code=500, detail="KPI service unavailable")
+            else:
+                raise HTTPException(status_code=r.status_code, detail=f"KPI fetch failed: {r.text}")
+
+        # Extract metrics safely
+        kpi_list = kpi_data.get("data", [])
+        if not kpi_list:
+            return {
+                "store_id": store_id,
+                "kpi": kpi_data,
+                "ai_summary": "No metrics available for AI summary."
+            }
+
+        store_kpi = kpi_list[0]
+        metrics = store_kpi.get("metrics", {})
+
+        if not metrics:
+            return {
+                "store_id": store_id,
+                "kpi": kpi_data,
+                "ai_summary": "No metrics available for AI summary."
+            }
+
+        # Debug log
+        print(f"DEBUG: metrics for store {store_id}: {metrics}")
+
+        # Generate AI summary
+        ai_summary = generate_ai_summary(metrics)
+
+        return {
+            "store_id": store_id,
+            "kpi": kpi_data,
+            "ai_summary": ai_summary
+        }
+
+    except Exception as e:
+        print(f"❌ Error in report_json: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
+
 
 @app.get("/report/{store_id}", response_class=HTMLResponse)
 async def report(store_id: str, confirm: bool = False):

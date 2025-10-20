@@ -134,7 +134,8 @@ export const triggerDataProcessing = async (processType) => {
       {
         headers: {
           'X-API-KEY': 'demo-key'
-        }
+        },
+        timeout: 30000,
       }
     );
     
@@ -183,7 +184,7 @@ export const getAnalysis = async (analysisType) => {
 export const getKPIs = async () => {
   try {
     const response = await api.get(`${AGENT_ENDPOINTS.kpi}/kpis`);
-    return { success: true, data: response.data };
+    return response.data;  
   } catch (error) {
     if (error.response?.status === 401) {
       authService.logout();
@@ -192,6 +193,7 @@ export const getKPIs = async () => {
     return { success: false, error: error.message };
   }
 };
+
 
 // Generate report
 export const generateReport = async (storeId) => {
