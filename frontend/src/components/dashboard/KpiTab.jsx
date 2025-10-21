@@ -69,14 +69,14 @@ const KpiTab = () => {
 
       {kpis && kpis.length > 0 && (
         <Alert severity="success" sx={{ mb: 3 }}>
-          ✅ REAL KPIs calculated successfully! Found {kpis.length} stores with real data.
+          ✅ KPIs calculated successfully! Found {kpis.length} stores with real data.
         </Alert>
       )}
 
       {kpis && kpis.length > 0 ? (
         <Box>
           <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-            📈 REAL Store Performance KPIs
+            📈 Store Performance KPIs
           </Typography>
 
           {kpis.map((kpi, index) => (
@@ -196,7 +196,7 @@ const KpiTab = () => {
           <CircularProgress size={40} sx={{ mb: 2 }} />
           <Typography variant="h6">Calculating REAL KPIs...</Typography>
           <Typography variant="body2" color="text.secondary">
-            Processing your actual transaction data
+            Processing your  transaction data
           </Typography>
         </Box>
       )}
