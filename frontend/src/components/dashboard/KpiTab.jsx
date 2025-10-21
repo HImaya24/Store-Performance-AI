@@ -17,55 +17,32 @@ import { getKPIs } from '../../services/api';
 const KpiTab = () => {
   const [calculating, setCalculating] = useState(false);
   const [kpis, setKpis] = useState(null);
+  const [error, setError] = useState(null);
 
   const handleCalculateKPIs = async () => {
     setCalculating(true);
     setKpis(null);
+    setError(null);
     
     try {
-      const response = await getKPIs();
-      setKpis(response);
+      const kpiData = await getKPIs();
+      console.log('📊 KPI Data received:', kpiData);
+      
+      if (Array.isArray(kpiData) && kpiData.length > 0) {
+        setKpis(kpiData);
+        setError(null);
+      } else {
+        setError('No KPI data received from server');
+        setKpis([]);
+      }
     } catch (error) {
-      setKpis({ success: false, error: error.message });
+      console.error('KPI calculation error:', error);
+      setError(error.message);
+      setKpis([]);
     } finally {
       setCalculating(false);
     }
   };
-
-  // Mock KPI data for demonstration
-  const mockKpis = [
-    {
-      store_id: 'Los Angeles',
-      metrics: {
-        total_sales: 124560,
-        sales_count: 1847,
-        average_order_value: 67.45,
-        total_items_sold: 5421
-      },
-      by_customer_category: {
-        'VIP': 45600,
-        'Regular': 65400,
-        'New': 13560
-      },
-      by_payment_method: {
-        'Credit Card': 78900,
-        'Debit Card': 32400,
-        'Cash': 8760,
-        'Digital Wallet': 4500
-      }
-    },
-    {
-      store_id: 'New York',
-      metrics: {
-        total_sales: 98760,
-        sales_count: 1521,
-        average_order_value: 64.92,
-        total_items_sold: 4215
-      }
-    }
-  ];
-
-  const displayKpis = kpis?.success ? kpis.data : mockKpis;
 
   return (
     <Box>
@@ -84,27 +61,25 @@ const KpiTab = () => {
         </Button>
       </Box>
 
-      {kpis && (
-        <Box>
-          {kpis.success ? (
-            <Alert severity="success" sx={{ mb: 3 }}>
-              ✅ KPIs calculated successfully!
-            </Alert>
-          ) : (
-            <Alert severity="warning" sx={{ mb: 3 }}>
-              Using demo KPI data. {kpis.error}
-            </Alert>
-          )}
-        </Box>
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          ❌ Error: {error}
+        </Alert>
       )}
 
-      {displayKpis && displayKpis.length > 0 ? (
+      {kpis && kpis.length > 0 && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          ✅ REAL KPIs calculated successfully! Found {kpis.length} stores with real data.
+        </Alert>
+      )}
+
+      {kpis && kpis.length > 0 ? (
         <Box>
           <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-            📈 Store Performance KPIs
+            📈 REAL Store Performance KPIs
           </Typography>
 
-          {displayKpis.map((kpi, index) => (
+          {kpis.map((kpi, index) => (
             <Paper key={index} sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom color="primary">
                 🏪 {kpi.store_id || 'Unknown Store'}
@@ -116,7 +91,7 @@ const KpiTab = () => {
                   <Card>
                     <CardContent sx={{ textAlign: 'center' }}>
                       <Typography variant="h6" color="primary">
-                        ${kpi.metrics?.total_sales?.toLocaleString() || '0'}
+                        ${kpi.metrics?.total_sales?.toLocaleString() || kpi.total_sales?.toLocaleString() || '0'}
                       </Typography>
                       <Typography variant="body2">Total Sales</Typography>
                     </CardContent>
@@ -126,7 +101,7 @@ const KpiTab = () => {
                   <Card>
                     <CardContent sx={{ textAlign: 'center' }}>
                       <Typography variant="h6" color="secondary">
-                        {kpi.metrics?.sales_count?.toLocaleString() || '0'}
+                        {kpi.metrics?.sales_count?.toLocaleString() || kpi.sales_count?.toLocaleString() || '0'}
                       </Typography>
                       <Typography variant="body2">Transactions</Typography>
                     </CardContent>
@@ -136,7 +111,7 @@ const KpiTab = () => {
                   <Card>
                     <CardContent sx={{ textAlign: 'center' }}>
                       <Typography variant="h6" color="success.main">
-                        ${kpi.metrics?.average_order_value?.toFixed(2) || '0.00'}
+                        ${(kpi.metrics?.average_order_value || kpi.average_order_value || 0).toFixed(2)}
                       </Typography>
                       <Typography variant="body2">Avg Order Value</Typography>
                     </CardContent>
@@ -146,7 +121,7 @@ const KpiTab = () => {
                   <Card>
                     <CardContent sx={{ textAlign: 'center' }}>
                       <Typography variant="h6" color="warning.main">
-                        {kpi.metrics?.total_items_sold?.toLocaleString() || '0'}
+                        {kpi.metrics?.total_items_sold?.toLocaleString() || kpi.total_items_sold?.toLocaleString() || '0'}
                       </Typography>
                       <Typography variant="body2">Items Sold</Typography>
                     </CardContent>
@@ -155,13 +130,13 @@ const KpiTab = () => {
               </Grid>
 
               {/* Customer Category Breakdown */}
-              {kpi.by_customer_category && (
+              {(kpi.by_customer_category || kpi.metrics?.by_customer_category) && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="h6" gutterBottom>
-                    Customer Category Breakdown
+                    👥 Customer Category Breakdown
                   </Typography>
                   <Grid container spacing={1}>
-                    {Object.entries(kpi.by_customer_category).map(([category, amount]) => (
+                    {Object.entries(kpi.by_customer_category || kpi.metrics?.by_customer_category || {}).map(([category, amount]) => (
                       <Grid item xs={6} sm={4} key={category}>
                         <Card variant="outlined">
                           <CardContent sx={{ textAlign: 'center', py: 1 }}>
@@ -169,7 +144,7 @@ const KpiTab = () => {
                               {category}
                             </Typography>
                             <Typography variant="body2" color="primary">
-                              ${amount.toLocaleString()}
+                              ${typeof amount === 'number' ? amount.toLocaleString() : amount}
                             </Typography>
                           </CardContent>
                         </Card>
@@ -180,13 +155,13 @@ const KpiTab = () => {
               )}
 
               {/* Payment Method Breakdown */}
-              {kpi.by_payment_method && (
+              {(kpi.by_payment_method || kpi.metrics?.by_payment_method) && (
                 <Box>
                   <Typography variant="h6" gutterBottom>
-                    Payment Method Breakdown
+                    💳 Payment Method Breakdown
                   </Typography>
                   <Grid container spacing={1}>
-                    {Object.entries(kpi.by_payment_method).map(([method, amount]) => (
+                    {Object.entries(kpi.by_payment_method || kpi.metrics?.by_payment_method || {}).map(([method, amount]) => (
                       <Grid item xs={6} sm={3} key={method}>
                         <Card variant="outlined">
                           <CardContent sx={{ textAlign: 'center', py: 1 }}>
@@ -194,7 +169,7 @@ const KpiTab = () => {
                               {method}
                             </Typography>
                             <Typography variant="body2" color="secondary">
-                              ${amount.toLocaleString()}
+                              ${typeof amount === 'number' ? amount.toLocaleString() : amount}
                             </Typography>
                           </CardContent>
                         </Card>
@@ -204,14 +179,26 @@ const KpiTab = () => {
                 </Box>
               )}
 
-              {index < displayKpis.length - 1 && <Divider sx={{ mt: 3 }} />}
+              {index < kpis.length - 1 && <Divider sx={{ mt: 3 }} />}
             </Paper>
           ))}
         </Box>
       ) : (
-        <Alert severity="info">
-          No KPI data available. Click "Calculate KPIs" to generate performance metrics.
-        </Alert>
+        !calculating && (
+          <Alert severity="info">
+            📊 No KPI data available. Click "Calculate KPIs" to generate performance metrics from your real data.
+          </Alert>
+        )
+      )}
+
+      {calculating && (
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <CircularProgress size={40} sx={{ mb: 2 }} />
+          <Typography variant="h6">Calculating REAL KPIs...</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Processing your actual transaction data
+          </Typography>
+        </Box>
       )}
     </Box>
   );

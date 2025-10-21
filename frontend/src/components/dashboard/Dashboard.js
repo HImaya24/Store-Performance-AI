@@ -367,7 +367,7 @@ const Dashboard = ({ onLogout }) => {
             <Card sx={{ background: 'rgba(30, 41, 59, 0.8)', backdropFilter: 'blur(10px)' }}>
               <CardContent sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" fontWeight="bold" color="secondary">
-                  {kpiData ? (Array.isArray(kpiData) ? kpiData.length : 1) : 0}
+                {data?.data ? [...new Set(data.data.map(item => item.store_id))].length : 0}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Stores Tracked

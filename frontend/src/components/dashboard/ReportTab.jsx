@@ -15,7 +15,7 @@ import {
   CardContent,
 } from '@mui/material';
 import { Description as ReportIcon, Download as DownloadIcon } from '@mui/icons-material';
-import { generateReport } from '../../services/api';
+import { generateReport,fetchReportSummary } from '../../services/api';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer, Cell
@@ -25,6 +25,7 @@ const ReportTab = ({ data }) => {
   const [generating, setGenerating] = useState(false);
   const [selectedStore, setSelectedStore] = useState('');
   const [report, setReport] = useState(null);
+  const [aiSummary, setAiSummary] = useState(null);
 
   // Extract unique stores from data
   const availableStores = data?.data 
@@ -110,10 +111,16 @@ const ReportTab = ({ data }) => {
 
     setGenerating(true);
     setReport(null);
+    setAiSummary(null);
     
     try {
-      const response = await generateReport(selectedStore);
-      setReport(response);
+      const [reportResponse, summaryResponse] = await Promise.all([
+        generateReport(selectedStore),
+        fetchReportSummary(selectedStore),
+      ]);
+
+      setReport(reportResponse);
+      setAiSummary(summaryResponse.ai_summary); // ✅ set AI summary
     } catch (error) {
       setReport({ success: false, error: error.message });
     } finally {
@@ -297,6 +304,15 @@ const ReportTab = ({ data }) => {
             color: #6c757d;
             font-style: italic;
         }
+        pre { 
+        white-space: pre-wrap; 
+        font-family: Arial,
+        sans-serif;
+        background: #f4f4f4;
+        padding: 15px;
+        border-radius: 8px; 
+        }
+
     </style>
 </head>
 <body>
@@ -330,6 +346,14 @@ const ReportTab = ({ data }) => {
                     </div>
                 </div>
             </div>
+
+             <!-- AI Summary Section -->
+            ${aiSummary ? `
+            <div class="section">
+                <h2 class="section-title">🧠 AI Insights</h2>
+                <pre>${aiSummary}</pre>
+            </div>
+            ` : ''}
 
             <!-- Event Breakdown -->
             <div class="section">
@@ -731,7 +755,21 @@ const ReportTab = ({ data }) => {
                               );
                             })()}
                           </Box>
-                        </Box>
+                         
+                          {aiSummary && (
+                            <Box sx={{ mt: 3, p: 2, bgcolor: '#0e0d0dff', borderRadius: 2 }}>
+                              <Typography variant="h6" gutterBottom>
+                                🧠 AI Insights
+                              </Typography>
+                              <Typography
+                                component="pre"
+                                sx={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}
+                              >
+                                {aiSummary}
+                              </Typography>
+                            </Box>
+                          )}
+                            </Box>
                       )}
                     </Box>
                   </Box>
