@@ -52,6 +52,8 @@ import {
   generateReport,
   semanticSearch
 } from '../../services/api';
+import PricingTab from './PricingTab';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 
 const TabPanel = ({ children, value, index, ...other }) => (
   <div
@@ -85,6 +87,7 @@ const Dashboard = ({ onLogout }) => {
     { label: 'IR Search', icon: <IRSearchIcon />, component: <IRSearchTab /> },
     { label: 'KPI', icon: <KpiIcon />, component: <KpiTab /> },
     { label: 'Report', icon: <ReportIcon />, component: <ReportTab data={data} /> },
+    { label: 'Pricing', icon: <AttachMoneyIcon />, component: <PricingTab /> },
   ];
 
   useEffect(() => {
