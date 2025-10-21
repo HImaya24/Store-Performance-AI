@@ -54,6 +54,7 @@ import {
 } from '../../services/api';
 import PricingTab from './PricingTab';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import ChatBot from './ChatBot';
 
 const TabPanel = ({ children, value, index, ...other }) => (
   <div
@@ -459,10 +460,12 @@ const Dashboard = ({ onLogout }) => {
         {/* Security Footer */}
         <Box sx={{ mt: 4, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
-            🔒 Secured Session • Role: Admin • {new Date().toLocaleDateString()}
+            🔒 Secured Session • Role: User • {new Date().toLocaleDateString()}
           </Typography>
         </Box>
       </Container>
+
+      <ChatBot />
     </Box>
   );
 };
