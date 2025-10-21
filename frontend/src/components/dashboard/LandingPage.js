@@ -149,7 +149,7 @@ const LandingPage = ({ onGetStarted }) => {
                       ))}
                     </Box>
                     <Typography variant="body2" color={alpha('#fff', 0.7)}>
-                      4.9/5 (500+ stores)
+                      4.9/5 
                     </Typography>
                   </Box>
                 </Box>

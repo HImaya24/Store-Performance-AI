@@ -180,7 +180,7 @@ const ProductSearchTab = ({ data }) => {
               <TextField
                 fullWidth
                 label="🔍 Search for products"
-                placeholder="Enter product name (e.g., coffee maker, blender, toaster...)"
+                placeholder="Enter product name (e.g., butter, apple, olive oil...)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -409,7 +409,7 @@ const ProductSearchTab = ({ data }) => {
               Try searching for common products like:
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {['coffee maker', 'blender', 'toaster', 'microwave', 'air fryer'].map(product => (
+              {['bread', 'baby wipes', 'olive oil', 'microwave', 'beef'].map(product => (
                 <Chip
                   key={product}
                   label={product}

@@ -240,3 +240,39 @@ export const logout = () => {
 
 // Export auth service for use in components
 export { authService };
+
+// In services/api.js, add these functions:
+
+export const chatWithAI = async (question, history = []) => {
+  try {
+    const response = await fetch('http://localhost:8101/chat/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: question,
+        history: history
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      response: data.response,
+      intent: data.intent,
+      timestamp: data.timestamp
+    };
+  } catch (error) {
+    console.error('AI Chat error:', error);
+    return {
+      success: false,
+      response: "I'm having trouble connecting to the AI service right now. Please try again later.",
+      error: error.message
+    };
+  }
+};
