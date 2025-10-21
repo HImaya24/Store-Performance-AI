@@ -464,5 +464,5 @@ def health():
     }
 
 if __name__ == "__main__":
-    print("🚀 Starting Analyzer Agent (DEBUG MODE)...")
+    print("🚀 Starting Analyzer Agent...")
     uvicorn.run(app, host="0.0.0.0", port=8101)
