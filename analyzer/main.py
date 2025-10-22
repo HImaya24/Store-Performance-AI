@@ -9,9 +9,11 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import requests
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+
+
+from .advanced_analysis import AdvancedPatternAnalyzer
+from .enhanced_llm_analysis import AdvancedPatternAnalyzer as EnhancedPatternAnalyzer
+from .retrieval_system import SemanticSearchEngine
 
 load_dotenv()
 
@@ -37,84 +39,10 @@ print(f"   GROQ_API_KEY: {'***' + GROQ_API_KEY[-4:] if GROQ_API_KEY else 'NOT SE
 # ThreadPool for parallel LLM calls
 executor = ThreadPoolExecutor(max_workers=5)
 
-# Simple Semantic Search Engine
-class SemanticSearchEngine:
-    def __init__(self):
-        self.vectorizer = TfidfVectorizer(stop_words='english', max_features=1000)
-        self.documents = []
-        self.document_metadata = []
-        self.fitted = False
-    
-    def index_events(self, events: List[dict]):
-        """Index events for semantic search"""
-        documents = []
-        metadata = []
-        
-        for event in events:
-            if event.get("event_type") == "sale":
-                payload = event.get("payload", {})
-                
-                # Create searchable document
-                doc_parts = [
-                    f"store_{event.get('store_id', '')}",
-                    f"season_{payload.get('season', '')}",
-                    f"customer_{payload.get('customer_category', '')}",
-                    f"payment_{payload.get('payment_method', '')}",
-                    f"promotion_{payload.get('promotion', '')}",
-                ]
-                
-                # Add products
-                products = payload.get("items", [])
-                if isinstance(products, list):
-                    doc_parts.extend([f"product_{p}" for p in products])
-                else:
-                    doc_parts.append(f"product_{products}")
-                
-                document_text = " ".join(doc_parts).lower()
-                documents.append(document_text)
-                metadata.append({
-                    "event_id": event.get("event_id"),
-                    "store_id": event.get("store_id"),
-                    "amount": payload.get("amount", 0),
-                    "products": products,
-                    "timestamp": event.get("ts")
-                })
-        
-        if documents:
-            self.documents = documents
-            self.document_metadata = metadata
-            self.vectorizer.fit(documents)
-            self.fitted = True
-    
-    def search_similar_patterns(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
-        """Find similar patterns using semantic search"""
-        if not self.fitted or not self.documents:
-            print("❌ Search engine not ready - no data indexed")
-            return []
-        
-        # Transform query and documents
-        query_vec = self.vectorizer.transform([query.lower()])
-        doc_vecs = self.vectorizer.transform(self.documents)
-        
-        # Calculate similarities
-        similarities = cosine_similarity(query_vec, doc_vecs).flatten()
-        
-        # Get top k results
-        top_indices = np.argsort(similarities)[-top_k:][::-1]
-        
-        results = []
-        for idx in top_indices:
-            if similarities[idx] > 0.05:  # Lower threshold for more results
-                results.append({
-                    "metadata": self.document_metadata[idx],
-                    "similarity_score": float(similarities[idx]),
-                    "document_preview": self.documents[idx][:100] + "..."
-                })
-        
-        print(f"📊 Found {len(results)} results for query: '{query}'")
-        return results
 
 search_engine = SemanticSearchEngine()
+pattern_analyzer = AdvancedPatternAnalyzer()
+enhanced_analyzer = EnhancedPatternAnalyzer()
 
 def test_groq_connection():
     """Test if we can connect to Groq API"""
@@ -317,6 +245,32 @@ async def analyze(events: List[dict]):
     print(f"📋 Sample event structure:")
     print(json.dumps(sample_event, indent=2, default=str)[:500] + "...")
 
+    #  USE THE IMPORTED ANALYZERS FOR ADVANCED ANALYSIS
+    advanced_insights = {}
+    try:
+        # Run seasonal pattern analysis
+        seasonal_insights = pattern_analyzer.detect_product_seasonality(events)
+        print(f"✅ Seasonal analysis: {len(seasonal_insights.get('insights', []))} insights")
+        
+        # Run enhanced analysis
+        enhanced_insights = enhanced_analyzer.detect_product_seasonality(events)
+        print(f"✅ Enhanced analysis: {len(enhanced_insights.get('insights', []))} insights")
+        
+        # Find cross-selling opportunities
+        cross_selling = search_engine.find_cross_selling_opportunities(events)
+        print(f"✅ Cross-selling: {len(cross_selling)} opportunities")
+        
+        advanced_insights = {
+            "seasonal_insights": seasonal_insights,
+            "enhanced_insights": enhanced_insights,
+            "cross_selling_opportunities": cross_selling
+        }
+        
+    except Exception as e:
+        print(f"❌ Advanced analysis modules error: {e}")
+        advanced_insights = {"error": str(e)}
+
+    # Continue with LLM analysis as before
     if USE_LLM and GROQ_API_KEY:
         print(f"🤖 Using LLM for analysis...")
         tasks = [llm_insight_async(ev) for ev in events]
@@ -392,12 +346,14 @@ async def analyze(events: List[dict]):
     print(f"   Total insights: {len(output)}")
     print(f"   LLM insights: {llm_count}")
     print(f"   Simple insights: {len(output) - llm_count}")
+    print(f"   Advanced analysis: {len(advanced_insights.get('cross_selling_opportunities', []))} cross-selling opportunities")
     print(f"{'='*60}\n")
 
     return {
         "status": "ok",
         "insights": len(output),
         "insights_list": output,
+        "advanced_analysis": advanced_insights,  
         "llm_traces": llm_traces,
         "mode": "LLM" if USE_LLM and GROQ_API_KEY else "SIMPLE",
         "llm_insights_count": llm_count
@@ -429,7 +385,7 @@ async def semantic_search(query: str):
                     "message": "No data available for search. Please load data first."
                 }
         
-        # Perform semantic search
+        # USE THE IMPORTED SEARCH ENGINE
         results = search_engine.search_similar_patterns(query, top_k=10)
         
         print(f"🔍 Search results for '{query}': {len(results)} matches")
@@ -442,9 +398,6 @@ async def semantic_search(query: str):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-
-# Add this to your analyzer/main.py
 
 @app.post("/chat")
 async def chat_with_data(query: str):
@@ -700,12 +653,14 @@ def is_recent(timestamp) -> bool:
         return datetime.now() - event_time < timedelta(days=30)
     except:
         return False    
+
 # Load data when analyzer starts
 @app.on_event("startup")
 async def startup_event():
     print("🚀 Analyzer starting up - loading data from Collector...")
     events = load_events_from_collector()
     if events:
+        #  USE THE IMPORTED SEARCH ENGINE
         search_engine.index_events(events)
         print(f"✅ Pre-loaded {len(events)} events for semantic search")
     else:
@@ -717,7 +672,8 @@ def health():
         "status": "analyzer up", 
         "llm_enabled": USE_LLM,
         "groq_api_available": bool(GROQ_API_KEY),
-        "groq_working": groq_working
+        "groq_working": groq_working,
+        "modules_loaded": True  
     }
 
 if __name__ == "__main__":
