@@ -1,4 +1,4 @@
-# collector/main.py - SIMPLE WORKING AUTH
+# collector/main.py 
 import os, re
 from fastapi import FastAPI, HTTPException, Depends, Header
 from typing import List, Optional
@@ -96,7 +96,7 @@ async def login(credentials: dict):
 def health_check():
     return {"status": "healthy", "events_count": len(EVENT_STORE)}
 
-# === PROTECTED ENDPOINTS (Auth required) ===
+# PROTECTED ENDPOINTS (Authentication required) ===
 @app.post("/collect/batch")
 async def collect_batch(events: List[StoreEvent], user: dict = Depends(get_current_user)):
     print(f"🔐 User {user['username']} is collecting {len(events)} events")
@@ -126,8 +126,8 @@ async def collect_batch(events: List[StoreEvent], user: dict = Depends(get_curre
     return {"status": "ok", "received": len(sanitized), "user": user['username']}
 
 @app.get("/events")
-async def list_events(user: dict = Depends(get_current_user)):
-    print(f"🔐 User {user['username']} accessed events")
+async def list_events():
+    
     return EVENT_STORE
 
 def redact(payload: dict):

@@ -134,7 +134,8 @@ export const triggerDataProcessing = async (processType) => {
       {
         headers: {
           'X-API-KEY': 'demo-key'
-        }
+        },
+        timeout: 30000,
       }
     );
     
@@ -183,7 +184,7 @@ export const getAnalysis = async (analysisType) => {
 export const getKPIs = async () => {
   try {
     const response = await api.get(`${AGENT_ENDPOINTS.kpi}/kpis`);
-    return { success: true, data: response.data };
+    return response.data;  
   } catch (error) {
     if (error.response?.status === 401) {
       authService.logout();
@@ -192,6 +193,7 @@ export const getKPIs = async () => {
     return { success: false, error: error.message };
   }
 };
+
 
 // Generate report
 export const generateReport = async (storeId) => {
@@ -207,6 +209,14 @@ export const generateReport = async (storeId) => {
   }
 };
 
+// ✅ New function to fetch AI-generated summary
+export const fetchReportSummary = async (storeId) => {
+  const response = await fetch(`http://localhost:8103/report/json/${storeId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch AI summary: ${response.statusText}`);
+  }
+  return await response.json();
+};
 // Login function
 export const login = async (username, password) => {
   try {
@@ -230,3 +240,39 @@ export const logout = () => {
 
 // Export auth service for use in components
 export { authService };
+
+// In services/api.js, add these functions:
+
+export const chatWithAI = async (question, history = []) => {
+  try {
+    const response = await fetch('http://localhost:8101/chat/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: question,
+        history: history
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      response: data.response,
+      intent: data.intent,
+      timestamp: data.timestamp
+    };
+  } catch (error) {
+    console.error('AI Chat error:', error);
+    return {
+      success: false,
+      response: "I'm having trouble connecting to the AI service right now. Please try again later.",
+      error: error.message
+    };
+  }
+};

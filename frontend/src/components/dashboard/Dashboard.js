@@ -52,6 +52,9 @@ import {
   generateReport,
   semanticSearch
 } from '../../services/api';
+import PricingTab from './PricingTab';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import ChatBot from './ChatBot';
 
 const TabPanel = ({ children, value, index, ...other }) => (
   <div
@@ -85,6 +88,7 @@ const Dashboard = ({ onLogout }) => {
     { label: 'IR Search', icon: <IRSearchIcon />, component: <IRSearchTab /> },
     { label: 'KPI', icon: <KpiIcon />, component: <KpiTab /> },
     { label: 'Report', icon: <ReportIcon />, component: <ReportTab data={data} /> },
+    { label: 'Pricing', icon: <AttachMoneyIcon />, component: <PricingTab /> },
   ];
 
   useEffect(() => {
@@ -367,7 +371,7 @@ const Dashboard = ({ onLogout }) => {
             <Card sx={{ background: 'rgba(30, 41, 59, 0.8)', backdropFilter: 'blur(10px)' }}>
               <CardContent sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" fontWeight="bold" color="secondary">
-                  {kpiData ? (Array.isArray(kpiData) ? kpiData.length : 1) : 0}
+                {data?.data ? [...new Set(data.data.map(item => item.store_id))].length : 0}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Stores Tracked
@@ -456,10 +460,12 @@ const Dashboard = ({ onLogout }) => {
         {/* Security Footer */}
         <Box sx={{ mt: 4, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
-            🔒 Secured Session • Role: Admin • {new Date().toLocaleDateString()}
+            🔒 Secured Session • Role: User • {new Date().toLocaleDateString()}
           </Typography>
         </Box>
       </Container>
+
+      <ChatBot />
     </Box>
   );
 };

@@ -443,6 +443,263 @@ async def semantic_search(query: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
+
+# Add this to your analyzer/main.py
+
+@app.post("/chat")
+async def chat_with_data(query: str):
+    """
+    Handle natural language queries about the retail data
+    """
+    try:
+        # First, try semantic search for data-specific queries
+        search_results = search_engine.search_similar_patterns(query, top_k=5)
+        
+        # Generate a natural language response
+        if search_results:
+            # Create summary from search results
+            total_sales = sum(r["metadata"]["amount"] for r in search_results)
+            stores_involved = list(set(r["metadata"]["store_id"] for r in search_results))
+            
+            response = {
+                "answer": f"I found {len(search_results)} relevant transactions. " +
+                         f"Total sales: ${total_sales:.2f} across {len(stores_involved)} stores. " +
+                         f"The most similar transaction was at {search_results[0]['metadata']['store_id']} " +
+                         f"with ${search_results[0]['metadata']['amount']:.2f} in sales.",
+                "results": search_results,
+                "type": "data_analysis"
+            }
+        else:
+            # Fallback for general questions
+            response = {
+                "answer": "I can help you analyze your retail data. Try asking about sales, customers, products, or store performance.",
+                "results": [],
+                "type": "general"
+            }
+        
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+@app.post("/chat/query")
+async def chat_query(chat_request: dict):
+    """
+    AI-powered chatbot that understands natural language questions about retail data
+    """
+    try:
+        user_question = chat_request.get("question", "")
+        conversation_history = chat_request.get("history", [])
+        
+        print(f"🤖 AI Chat Query: '{user_question}'")
+        
+        if not user_question.strip():
+            return {"response": "Please ask a question about your retail data!"}
+        
+        # First, analyze the user's intent and extract key information
+        intent_analysis = await analyze_user_intent(user_question)
+        print(f"🔍 Intent Analysis: {intent_analysis}")
+        
+        # Get relevant data based on the intent
+        context_data = await get_relevant_data(intent_analysis)
+        
+        # Generate AI response using Groq
+        ai_response = await generate_ai_response(
+            user_question=user_question,
+            intent_analysis=intent_analysis,
+            context_data=context_data,
+            history=conversation_history
+        )
+        
+        return {
+            "response": ai_response,
+            "intent": intent_analysis,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"❌ Chat query error: {e}")
+        return {
+            "response": "I apologize, but I'm having trouble processing your question right now. Please try again in a moment.",
+            "error": str(e)
+        }
+
+async def analyze_user_intent(question: str) -> dict:
+    """Use AI to understand what the user is asking about"""
+    
+    prompt = f"""
+    Analyze this user question about retail data and extract key information:
+    
+    USER QUESTION: "{question}"
+    
+    Extract the following:
+    1. Primary intent (sales_analysis, product_info, store_performance, customer_behavior, comparison, trends)
+    2. Store names mentioned (if any)
+    3. Product categories/names mentioned (if any)  
+    4. Time period mentioned (if any)
+    5. Specific metrics requested (revenue, products, customers, etc.)
+    6. Question type (ranking, comparison, details, trends)
+    
+    Return as JSON format.
+    """
+    
+    try:
+        from groq import Groq
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=300,
+            response_format={"type": "json_object"}
+        )
+        
+        intent_data = json.loads(completion.choices[0].message.content)
+        return intent_data
+        
+    except Exception as e:
+        print(f"❌ Intent analysis failed: {e}")
+        # Fallback simple analysis
+        question_lower = question.lower()
+        return {
+            "primary_intent": "general_query",
+            "stores": [word for word in ["new york", "los angeles", "chicago", "miami"] if word in question_lower],
+            "products": [],
+            "time_period": "recent",
+            "metrics": ["general"],
+            "question_type": "information"
+        }
+
+async def get_relevant_data(intent_analysis: dict) -> dict:
+    """Get relevant data based on user intent"""
+    
+    # Load events from collector
+    events = load_events_from_collector()
+    if not events:
+        return {"error": "No data available"}
+    
+    relevant_data = {
+        "total_events": len(events),
+        "stores": list(set(e.get("store_id") for e in events if e.get("store_id"))),
+        "analysis_summary": {}
+    }
+    
+    # Analyze sales data
+    sales_events = [e for e in events if e.get("event_type") == "sale"]
+    if sales_events:
+        # Store performance
+        store_sales = {}
+        for event in sales_events:
+            store = event.get("store_id")
+            amount = event.get("payload", {}).get("amount", 0)
+            store_sales[store] = store_sales.get(store, 0) + amount
+        
+        relevant_data["store_performance"] = {
+            "top_stores": dict(sorted(store_sales.items(), key=lambda x: x[1], reverse=True)[:5]),
+            "total_sales": sum(store_sales.values()),
+            "store_count": len(store_sales)
+        }
+        
+        # Product analysis
+        product_sales = {}
+        for event in sales_events:
+            items = event.get("payload", {}).get("items", [])
+            amount = event.get("payload", {}).get("amount", 0)
+            if isinstance(items, list):
+                for item in items:
+                    product_sales[item] = product_sales.get(item, 0) + (amount / len(items))
+            elif items:
+                product_sales[items] = product_sales.get(items, 0) + amount
+        
+        relevant_data["product_analysis"] = {
+            "top_products": dict(sorted(product_sales.items(), key=lambda x: x[1], reverse=True)[:10]),
+            "total_products": len(product_sales)
+        }
+        
+        # Time-based analysis (last 30 days)
+        recent_events = [e for e in sales_events if is_recent(e.get("ts"))]
+        relevant_data["recent_trends"] = {
+            "recent_sales": sum(e.get("payload", {}).get("amount", 0) for e in recent_events),
+            "recent_transactions": len(recent_events)
+        }
+    
+    return relevant_data
+
+async def generate_ai_response(user_question: str, intent_analysis: dict, context_data: dict, history: list) -> str:
+    """Generate intelligent AI response using context and data"""
+    
+    # Build context prompt with actual data
+    data_context = ""
+    if "store_performance" in context_data:
+        top_stores = context_data["store_performance"]["top_stores"]
+        data_context += f"TOP PERFORMING STORES:\n"
+        for store, sales in list(top_stores.items())[:3]:
+            data_context += f"- {store}: ${sales:,.2f}\n"
+    
+    if "product_analysis" in context_data:
+        top_products = context_data["product_analysis"]["top_products"]
+        data_context += f"\nTOP SELLING PRODUCTS:\n"
+        for product, revenue in list(top_products.items())[:5]:
+            data_context += f"- {product}: ${revenue:,.2f}\n"
+    
+    # Build conversation context
+    history_context = ""
+    if history:
+        history_context = "PREVIOUS CONVERSATION:\n"
+        for msg in history[-3:]:  # Last 3 messages
+            role = "User" if msg.get("isUser") else "Assistant"
+            history_context += f"{role}: {msg.get('text')}\n"
+    
+    prompt = f"""
+    You are an intelligent retail data assistant. Answer the user's question naturally and helpfully using the available data.
+    
+    {history_context}
+    
+    AVAILABLE RETAIL DATA:
+    {data_context}
+    
+    USER'S QUESTION: "{user_question}"
+    
+    USER'S INTENT: {intent_analysis}
+    
+    Please provide:
+    1. A direct, natural answer to their question
+    2. Relevant insights from the data (if available)
+    3. Specific numbers and facts when possible
+    4. Follow-up questions or suggestions for deeper analysis
+    5. Keep it conversational but professional
+    
+    If the data doesn't have exactly what they're asking for, be honest but helpful - suggest what you CAN tell them.
+    """
+    
+    try:
+        from groq import Groq
+        client = Groq(api_key=GROQ_API_KEY)
+        
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        return completion.choices[0].message.content.strip()
+        
+    except Exception as e:
+        print(f"❌ AI response generation failed: {e}")
+        return f"I understand you're asking about: {user_question}. Based on our data, I can provide insights about store performance, product sales, and customer trends. Could you be more specific about what you'd like to know?"
+
+def is_recent(timestamp) -> bool:
+    """Check if event is from last 30 days"""
+    if not timestamp:
+        return False
+    try:
+        from datetime import datetime, timedelta
+        event_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        return datetime.now() - event_time < timedelta(days=30)
+    except:
+        return False    
 # Load data when analyzer starts
 @app.on_event("startup")
 async def startup_event():
@@ -464,5 +721,5 @@ def health():
     }
 
 if __name__ == "__main__":
-    print("🚀 Starting Analyzer Agent (DEBUG MODE)...")
+    print("🚀 Starting Analyzer Agent...")
     uvicorn.run(app, host="0.0.0.0", port=8101)
