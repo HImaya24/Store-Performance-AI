@@ -86,17 +86,17 @@ npm start
 
 Each service runs in a separate terminal:
 
-- python collector/main.py
-- python coordinator/main.py
-- python analyzer/main.py
-- python kpi/main.py
-- python ir_search/main.py
+python collector/main.py
+python coordinator/main.py
+python analyzer/main.py
+python kpi/main.py
+python ir_search/main.py
 
 ## 🐳 Docker Deployment
-- Build and Run (All Services)  
+Build and Run (All Services)  
 docker-compose up --build
 
-- Stop Containers
+Stop Containers
 docker-compose down
 
 
@@ -111,11 +111,11 @@ Access the interactive dashboard at:
 
 Create a .env file in the root directory with the following:
 
-COLLECTOR_URL=http://localhost:8100
-COORDINATOR_URL=http://localhost:8110
-ANALYZER_URL=http://localhost:8101
-KPI_URL=http://localhost:8102
-API_KEY=demo-key
+COLLECTOR_URL=http://localhost:8100 .\
+COORDINATOR_URL=http://localhost:8110 .\
+ANALYZER_URL=http://localhost:8101 .\
+KPI_URL=http://localhost:8102 .\
+API_KEY=demo-key .\
 
 ## 🛡️ Privacy & Security
 
