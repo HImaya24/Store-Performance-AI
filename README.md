@@ -1,10 +1,6 @@
 # Store-Performance-AI
 
 # 🛍️ Store Performance AI  
-[![Build Status](https://img.shields.io/github/actions/workflow/status/HImaya24/Store-Performance-AI/ci.yml?branch=main)](https://github.com/HImaya24/Store-Performance-AI/actions)  
-[![License](https://img.shields.io/github/license/HImaya24/Store-Performance-AI.svg)](LICENSE)  
-[![Issues](https://img.shields.io/github/issues/HImaya24/Store-Performance-AI.svg)](https://github.com/HImaya24/Store-Performance-AI/issues)  
-[![Stars](https://img.shields.io/github/stars/HImaya24/Store-Performance-AI.svg)](https://github.com/HImaya24/Store-Performance-AI/stargazers)
 
 ## 🎯 Overview
 **Store Performance AI** is a distributed microservices platform that processes real-time retail transaction data while preserving customer privacy.  
@@ -90,17 +86,17 @@ npm start
 
 Each service runs in a separate terminal:
 
-python collector/main.py
-python coordinator/main.py
-python analyzer/main.py
-python kpi/main.py
-python ir_search/main.py
+- python collector/main.py
+- python coordinator/main.py
+- python analyzer/main.py
+- python kpi/main.py
+- python ir_search/main.py
 
 ## 🐳 Docker Deployment
-Build and Run (All Services)
+- Build and Run (All Services)  
 docker-compose up --build
 
-Stop Containers
+- Stop Containers
 docker-compose down
 
 
